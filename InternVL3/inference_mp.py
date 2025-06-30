@@ -1,3 +1,4 @@
+import os
 import torch
 import math
 import numpy as np
@@ -6,15 +7,6 @@ from decord import VideoReader, cpu
 from PIL import Image
 from torchvision.transforms.functional import InterpolationMode
 from transformers import AutoModel, AutoTokenizer, AutoConfig
-
-
-# path = "OpenGVLab/InternVL3-78B"
-# model = AutoModel.from_pretrained(
-#     path,
-#     torch_dtype=torch.bfloat16,
-#     low_cpu_mem_usage=True,
-#     use_flash_attn=True,
-#     trust_remote_code=True).eval().cuda()
 
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
@@ -131,80 +123,6 @@ model = AutoModel.from_pretrained(
     device_map=device_map).eval()
 tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
-if False:
-    # set the max number of tiles in `max_num`
-    pixel_values = load_image('./examples/image1.jpg', max_num=12).to(torch.bfloat16).cuda()
-    generation_config = dict(max_new_tokens=1024, do_sample=True)
-
-    # pure-text conversation (纯文本对话)
-    question = 'Hello, who are you?'
-    response, history = model.chat(tokenizer, None, question, generation_config, history=None, return_history=True)
-    print(f'User: {question}\nAssistant: {response}')
-
-    question = 'Can you tell me a story?'
-    response, history = model.chat(tokenizer, None, question, generation_config, history=history, return_history=True)
-    print(f'User: {question}\nAssistant: {response}')
-
-    # single-image single-round conversation (单图单轮对话)
-    question = '<image>\nPlease describe the image shortly.'
-    response = model.chat(tokenizer, pixel_values, question, generation_config)
-    print(f'User: {question}\nAssistant: {response}')
-
-    # single-image multi-round conversation (单图多轮对话)
-    question = '<image>\nPlease describe the image in detail.'
-    response, history = model.chat(tokenizer, pixel_values, question, generation_config, history=None, return_history=True)
-    print(f'User: {question}\nAssistant: {response}')
-
-    question = 'Please write a poem according to the image.'
-    response, history = model.chat(tokenizer, pixel_values, question, generation_config, history=history, return_history=True)
-    print(f'User: {question}\nAssistant: {response}')
-
-    # multi-image multi-round conversation, combined images (多图多轮对话，拼接图像)
-    pixel_values1 = load_image('./examples/image1.jpg', max_num=12).to(torch.bfloat16).cuda()
-    pixel_values2 = load_image('./examples/image2.jpg', max_num=12).to(torch.bfloat16).cuda()
-    pixel_values = torch.cat((pixel_values1, pixel_values2), dim=0)
-
-    question = '<image>\nDescribe the two images in detail.'
-    response, history = model.chat(tokenizer, pixel_values, question, generation_config,
-                                history=None, return_history=True)
-    print(f'User: {question}\nAssistant: {response}')
-
-    question = 'What are the similarities and differences between these two images.'
-    response, history = model.chat(tokenizer, pixel_values, question, generation_config,
-                                history=history, return_history=True)
-    print(f'User: {question}\nAssistant: {response}')
-
-    # multi-image multi-round conversation, separate images (多图多轮对话，独立图像)
-    pixel_values1 = load_image('./examples/image1.jpg', max_num=12).to(torch.bfloat16).cuda()
-    pixel_values2 = load_image('./examples/image2.jpg', max_num=12).to(torch.bfloat16).cuda()
-    pixel_values = torch.cat((pixel_values1, pixel_values2), dim=0)
-    num_patches_list = [pixel_values1.size(0), pixel_values2.size(0)]
-
-    question = 'Image-1: <image>\nImage-2: <image>\nDescribe the two images in detail.'
-    response, history = model.chat(tokenizer, pixel_values, question, generation_config,
-                                num_patches_list=num_patches_list,
-                                history=None, return_history=True)
-    print(f'User: {question}\nAssistant: {response}')
-
-    question = 'What are the similarities and differences between these two images.'
-    response, history = model.chat(tokenizer, pixel_values, question, generation_config,
-                                num_patches_list=num_patches_list,
-                                history=history, return_history=True)
-    print(f'User: {question}\nAssistant: {response}')
-
-    # batch inference, single image per sample (单图批处理)
-    pixel_values1 = load_image('./examples/image1.jpg', max_num=12).to(torch.bfloat16).cuda()
-    pixel_values2 = load_image('./examples/image2.jpg', max_num=12).to(torch.bfloat16).cuda()
-    num_patches_list = [pixel_values1.size(0), pixel_values2.size(0)]
-    pixel_values = torch.cat((pixel_values1, pixel_values2), dim=0)
-
-    questions = ['<image>\nDescribe the image in detail.'] * len(num_patches_list)
-    responses = model.batch_chat(tokenizer, pixel_values,
-                                num_patches_list=num_patches_list,
-                                questions=questions,
-                                generation_config=generation_config)
-    for question, response in zip(questions, responses):
-        print(f'User: {question}\nAssistant: {response}')
 
 # video multi-round conversation (视频多轮对话)
 def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
@@ -247,41 +165,96 @@ def load_video(video_path, bound=None, input_size=448, max_num=2, num_segments=3
     pixel_values = torch.cat(pixel_values_list)
     return pixel_values, num_patches_list
 
+
+def process_videos_pipeline_parallel(video_paths, model, tokenizer, generation_config, **video_kwargs):
+    """
+    Process videos one by one (TRUE pipeline parallelism)
+    Memory stays constant regardless of video count
+    """
+    results = []
+    
+    for i, video_path in enumerate(video_paths):
+        print(f"Processing video {i+1}/{len(video_paths)}: {os.path.basename(video_path)}")
+        
+        # Load ONE video at a time (not all together!)
+        pixel_values, num_patches_list = load_video(video_path, **video_kwargs)
+        pixel_values = pixel_values.to(torch.bfloat16).cuda()
+        
+        # Create question for this single video
+        video_prefix = ''.join([f'Frame{j+1}: <image>\n' for j in range(len(num_patches_list))])
+        
+        question = video_prefix + user_question_1
+        
+        # Process through your pipeline-parallel model
+        response, history = model.chat(
+            tokenizer, 
+            pixel_values, 
+            question, 
+            generation_config,
+            num_patches_list=num_patches_list, 
+            history=None, 
+            return_history=True
+        )
+
+        torch.cuda.empty_cache()
+
+        question = user_question_2
+        response, history = model.chat(tokenizer, pixel_values, question, generation_config, 
+                                       num_patches_list=num_patches_list, history=history, return_history=True)
+        
+        results.append({
+            'video': os.path.basename(video_path),
+            'response': response
+        })
+        
+        print(f'Q: {user_question_2}\nA: {response}\n')
+        
+        # Important: Clear memory after each video
+        del pixel_values, num_patches_list, response, history
+        torch.cuda.empty_cache()
+    
+    return results
+
 generation_config = dict(max_new_tokens=1024, do_sample=True)
 
+user_question_1 = 'Analyze any event in the given media.'
 
-#####
-# if True:
-video_path = "/workspace/vss-engine/samples/untitled/37.mp4"  # './examples/red-panda.mp4'
-pixel_values, num_patches_list = load_video(video_path, num_segments=None, max_num=2)
-pixel_values = pixel_values.to(torch.bfloat16).cuda()
-video_prefix = ''.join([f'Frame{i+1}: <image>\n' for i in range(len(num_patches_list))])
-
-user_question = 'Analyze any event in the given media.'
-question = video_prefix + user_question
-# Frame1: <image>\nFrame2: <image>\n...\nFrame8: <image>\n{question}
-# response = model.chat(tokenizer, pixel_values, question, generation_config)
-response, history = model.chat(tokenizer, pixel_values, question, generation_config,
-                            num_patches_list=num_patches_list, history=None, return_history=True)
-print(f'Q: {user_question}\nA: {response}')
-
-torch.cuda.empty_cache()
-
-user_question = """Given the media and description from previous response, output a detailed analysis of how you analyzed the scene. 
+user_question_2 = """Given the media and description below, output a detailed analysis of how you analyzed the scene. 
 You should conduct an analysis of what you see and how each component interacts with each other to the provided description.
 
 Follow step-by-step reasoning format;
 
-First step is the planning stage where you list up only few major regions of interest with noun category name (like person) followed by semicolon and noun phrase with short participial phrase (like person with red shirt) to piece together the activities within the scene.;
+First step is the planning stage where you list up only few major regions of interest with noun category name (like person) followed by colon and noun phrase with short participial phrase (like person with red shirt) to piece together the activities within the scene. Desired format: ##[Noun Category] : [noun phrase]##;
 
-Second step is reasoning stage where you analyze each region of interest you mentioned at the first step, plus the entire shot. Categorize with each region of interest and the entire shot. If situation is changed as the time goes by, say it with Oh!;
+Second step is reasoning stage where you analyze each region of interest you mentioned at the first step, plus the entire shot. Categorize with each region of interest and the entire shot. If situation is changed as the time goes by, say it with Oh!. Desired format: ##[Noun phrase] : \n- [Reasoning]##;
 
 The last step is conclusion where you assemble all reasoning and give comprehensive answer.
 """
-question = user_question  # video_prefix + user_question + "\nDescription : " + response
-# Frame1: <image>\nFrame2: <image>\n...\nFrame8: <image>\n{question}
-response, history = model.chat(tokenizer, pixel_values, question, generation_config, 
-                                num_patches_list=num_patches_list, history=history, return_history=True)
-print(f'Q: {user_question}\nA: {response}')
+
+
+#####
+# if True:
+# Load multiple videos
+video_path = "/workspace/vss-engine/samples/untitled/"
+video_paths = [
+    os.path.join(video_path, "37.mp4"),
+    os.path.join(video_path, "36.mp4"), 
+    os.path.join(video_path, "35.mp4"), 
+    os.path.join(video_path, "34.mp4")
+]
+results = process_videos_pipeline_parallel(
+    video_paths, 
+    model, 
+    tokenizer, 
+    generation_config,
+    num_segments=30,
+    max_num=2
+)
+
+for result in results:
+    video_name = result['video']
+    response = result['response']
+
+    print(f'Video: {video_name}\nA:\n {response}')
 
 print("=== Experiment done! ===")
