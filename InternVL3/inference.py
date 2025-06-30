@@ -1,5 +1,4 @@
 import torch
-from transformers import AutoTokenizer, AutoModel
 import math
 import numpy as np
 import torchvision.transforms as T
@@ -102,7 +101,7 @@ def split_model(model_path):
     num_layers_per_gpu = [num_layers_per_gpu] * world_size
     num_layers_per_gpu[0] = math.ceil(num_layers_per_gpu[0] * 0.5)
     layer_cnt = 0
-    for i, num_layer in enumerate(num_layers_per_gpu):
+    for i, num_layer in reversed(list(enumerate(num_layers_per_gpu))):
         for j in range(num_layer):
             device_map[f'language_model.model.layers.{layer_cnt}'] = i
             layer_cnt += 1
@@ -222,13 +221,18 @@ def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
     ])
     return frame_indices
 
-def load_video(video_path, bound=None, input_size=448, max_num=1, num_segments=32):
+def load_video(video_path, bound=None, input_size=448, max_num=2, num_segments=32, max_segments=30):
+    # max_num : max number of split per frame
+    max_num = max(1, max_num)
+
     vr = VideoReader(video_path, ctx=cpu(0), num_threads=1)
     max_frame = len(vr) - 1
     fps = float(vr.get_avg_fps())
 
     if num_segments is None or num_segments <= 0:
         num_segments = math.ceil(max_frame * 2 / fps)
+
+    num_segments = min(max_segments // max_num, num_segments)
 
     pixel_values_list, num_patches_list = [], []
     transform = build_transform(input_size=input_size)
@@ -245,33 +249,36 @@ def load_video(video_path, bound=None, input_size=448, max_num=1, num_segments=3
 
 generation_config = dict(max_new_tokens=1024, do_sample=True)
 
-video_path = "/workspace/vss-engine/samples/untitled/37.mp4"  # './examples/red-panda.mp4'
-pixel_values, num_patches_list = load_video(video_path, num_segments=None, max_num=2)
-pixel_values = pixel_values.to(torch.bfloat16).cuda()
-video_prefix = ''.join([f'Frame{i+1}: <image>\n' for i in range(len(num_patches_list))])
 
-user_question = 'Analyze any event in the given media.'
-question = video_prefix + user_question
-# Frame1: <image>\nFrame2: <image>\n...\nFrame8: <image>\n{question}
-response, history = model.chat(tokenizer, pixel_values, question, generation_config,
-                               num_patches_list=num_patches_list, history=None, return_history=True)
-print(f'Q: {user_question}\nA: {response}')
+#####
+if True:
+    video_path = "/workspace/vss-engine/samples/untitled/37.mp4"  # './examples/red-panda.mp4'
+    pixel_values, num_patches_list = load_video(video_path, num_segments=None, max_num=2)
+    pixel_values = pixel_values.to(torch.bfloat16).cuda()
+    video_prefix = ''.join([f'Frame{i+1}: <image>\n' for i in range(len(num_patches_list))])
 
-user_question = """
-Given the media and description below, output a detailed analysis of how you analyzed the scene. You should conduct an analysis of what you see and how each component interacts with each other to the provided description.
+    user_question = 'Analyze any event in the given media.'
+    question = video_prefix + user_question
+    # Frame1: <image>\nFrame2: <image>\n...\nFrame8: <image>\n{question}
+    response, history = model.chat(tokenizer, pixel_values, question, generation_config,
+                                num_patches_list=num_patches_list, history=None, return_history=True)
+    print(f'Q: {user_question}\nA: {response}')
 
-Follow step-by-step reasoning format;
+    user_question = """
+    Given the media and description below, output a detailed analysis of how you analyzed the scene. You should conduct an analysis of what you see and how each component interacts with each other to the provided description.
 
-First step is the planning stage where you list up only few major regions of interest with noun category name (like person) followed by semicolon and noun phrase with short participial phrase (like person with red shirt) to piece together the activities within the scene.;
+    Follow step-by-step reasoning format;
 
-Second step is reasoning stage where you analyze each region of interest you mentioned at the first step, plus the entire shot. Categorize with each region of interest and the entire shot. If situation is changed as the time goes by, say it with Oh!;
+    First step is the planning stage where you list up only few major regions of interest with noun category name (like person) followed by semicolon and noun phrase with short participial phrase (like person with red shirt) to piece together the activities within the scene.;
 
-The last step is conclusion where you assemble all reasoning and give comprehensive answer.
-"""
-question = video_prefix + user_question + "\nDescription : " + response
-# Frame1: <image>\nFrame2: <image>\n...\nFrame8: <image>\n{question}
-response, history = model.chat(tokenizer, pixel_values, question, generation_config,
-                               num_patches_list=num_patches_list, history=None, return_history=True)
-print(f'Q: {user_question}\nA: {response}')
+    Second step is reasoning stage where you analyze each region of interest you mentioned at the first step, plus the entire shot. Categorize with each region of interest and the entire shot. If situation is changed as the time goes by, say it with Oh!;
+
+    The last step is conclusion where you assemble all reasoning and give comprehensive answer.
+    """
+    question = video_prefix + user_question + "\nDescription : " + response
+    # Frame1: <image>\nFrame2: <image>\n...\nFrame8: <image>\n{question}
+    response, history = model.chat(tokenizer, pixel_values, question, generation_config,
+                                num_patches_list=num_patches_list, history=None, return_history=True)
+    print(f'Q: {user_question}\nA: {response}')
 
 print("=== Experiment done! ===")
