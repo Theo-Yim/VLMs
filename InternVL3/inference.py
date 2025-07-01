@@ -5,7 +5,7 @@ import torchvision.transforms as T
 from decord import VideoReader, cpu
 from PIL import Image
 from torchvision.transforms.functional import InterpolationMode
-from transformers import AutoModel, AutoTokenizer, AutoConfig
+from transformers import AutoModel, AutoTokenizer, AutoConfig, BitsAndBytesConfig
 
 
 # path = "OpenGVLab/InternVL3-78B"
@@ -121,10 +121,11 @@ def split_model(model_path):
 # If you set `load_in_8bit=False`, you will need at least three 80GB GPUs.
 model_path = 'OpenGVLab/InternVL3-78B'
 device_map = split_model(model_path)  # 'InternVL3-78B')
+quantization_config = BitsAndBytesConfig(load_in_8bit=False,)
 model = AutoModel.from_pretrained(
     model_path,
     torch_dtype=torch.bfloat16,
-    load_in_8bit=False,
+    quantization_config=quantization_config,
     low_cpu_mem_usage=True,
     use_flash_attn=True,
     trust_remote_code=True,

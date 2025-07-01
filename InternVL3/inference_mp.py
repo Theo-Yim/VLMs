@@ -6,7 +6,7 @@ import torchvision.transforms as T
 from decord import VideoReader, cpu
 from PIL import Image
 from torchvision.transforms.functional import InterpolationMode
-from transformers import AutoModel, AutoTokenizer, AutoConfig
+from transformers import AutoModel, AutoTokenizer, AutoConfig, BitsAndBytesConfig
 
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
@@ -113,10 +113,11 @@ def split_model(model_path):
 # If you set `load_in_8bit=False`, you will need at least three 80GB GPUs.
 model_path = 'OpenGVLab/InternVL3-78B'
 device_map = split_model(model_path)  # 'InternVL3-78B')
+quantization_config = BitsAndBytesConfig(load_in_8bit=True,)
 model = AutoModel.from_pretrained(
     model_path,
     torch_dtype=torch.bfloat16,
-    load_in_8bit=False,
+    quantization_config=quantization_config,
     low_cpu_mem_usage=True,
     use_flash_attn=True,
     trust_remote_code=True,
@@ -124,7 +125,7 @@ model = AutoModel.from_pretrained(
 tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
 
-# video multi-round conversation (视频多轮对话)
+# video multi-round conversation
 def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
     if bound:
         start, end = bound[0], bound[1]
@@ -166,7 +167,7 @@ def load_video(video_path, bound=None, input_size=448, max_num=2, num_segments=3
     return pixel_values, num_patches_list
 
 
-def process_videos_pipeline_parallel(video_paths, model, tokenizer, generation_config, **video_kwargs):
+def process_multiple_videos(video_paths, model, tokenizer, generation_config, **video_kwargs):
     """
     Process videos one by one (TRUE pipeline parallelism)
     Memory stays constant regardless of video count
@@ -183,53 +184,73 @@ def process_videos_pipeline_parallel(video_paths, model, tokenizer, generation_c
         # Create question for this single video
         video_prefix = ''.join([f'Frame{j+1}: <image>\n' for j in range(len(num_patches_list))])
         
-        question = video_prefix + user_question_1
+        question = video_prefix + user_question_new
         
         # Process through your pipeline-parallel model
-        response, history = model.chat(
+        response = model.chat(
             tokenizer, 
             pixel_values, 
             question, 
             generation_config,
             num_patches_list=num_patches_list, 
             history=None, 
-            return_history=True
+            return_history=False
         )
-
-        torch.cuda.empty_cache()
-
-        question = user_question_2
-        response, history = model.chat(tokenizer, pixel_values, question, generation_config, 
-                                       num_patches_list=num_patches_list, history=history, return_history=True)
         
         results.append({
             'video': os.path.basename(video_path),
             'response': response
         })
         
-        print(f'Q: {user_question_2}\nA: {response}\n')
+        print(f'A: {response}\n')
         
         # Important: Clear memory after each video
-        del pixel_values, num_patches_list, response, history
+        del pixel_values, num_patches_list, response
         torch.cuda.empty_cache()
     
     return results
 
 generation_config = dict(max_new_tokens=1024, do_sample=True)
 
-user_question_1 = 'Analyze any event in the given media.'
+user_question_new = """Given the media, output a detailed analysis of how you analyzed the scene in JSON format. 
+You should conduct an analysis of what you see and how each component interacts with each other.
 
-user_question_2 = """Given the media and description below, output a detailed analysis of how you analyzed the scene. 
-You should conduct an analysis of what you see and how each component interacts with each other to the provided description.
+Follow this JSON structure exactly:
 
-Follow step-by-step reasoning format;
+{
+  "analysis": {
+    "planning": {
+      "regions_of_interest": [
+        {
+          "category": "noun_category (e.g., person, car, dog)",
+          "description": "noun phrase with short participial phrase",
+          "relevance": "why this region is important for understanding the scene"
+        }
+      ]
+    },
+    "reasoning": {
+      "regional_analysis": [
+        {
+          "region": "region name from planning stage",
+          "observations": ["detailed analysis point 1", "detailed analysis point 2"]
+        }
+      ],
+      "overall_scene": {
+        "observations": ["overall scene analysis points"]
+      }
+    },
+    "conclusion": {
+      "comprehensive_analysis": "comprehensive and detailed summary assembling all reasoning"
+    }
+  }
+}
 
-First step is the planning stage where you list up only few major regions of interest with noun category name (like person) followed by colon and noun phrase with short participial phrase (like person with red shirt) to piece together the activities within the scene. Desired format: ##[Noun Category] : [noun phrase]##;
-
-Second step is reasoning stage where you analyze each region of interest you mentioned at the first step, plus the entire shot. Categorize with each region of interest and the entire shot. If situation is changed as the time goes by, say it with Oh!. Desired format: ##[Noun phrase] : \n- [Reasoning]##;
-
-The last step is conclusion where you assemble all reasoning and give comprehensive answer.
-"""
+IMPORTANT: 
+- Response must be valid JSON only
+- Include only few major regions of interest
+- During reasoning, follow natural reasoning flow - if you discover something new or need to reconsider, express it naturally (e.g., "Aha,", "Wait,", "Actually...", "Looking more carefully..."). Only use such expressions when there's a genuine reasoning transition, not artificially.
+- Each observation should be specific and detailed
+- For video content, note any significant temporal changes or developments naturally within your observations"""
 
 
 #####
@@ -242,7 +263,7 @@ video_paths = [
     os.path.join(video_path, "35.mp4"), 
     os.path.join(video_path, "34.mp4")
 ]
-results = process_videos_pipeline_parallel(
+results = process_multiple_videos(
     video_paths, 
     model, 
     tokenizer, 
