@@ -7,23 +7,29 @@ from decord import VideoReader, cpu
 from PIL import Image
 from torchvision.transforms.functional import InterpolationMode
 from transformers import AutoModel, AutoTokenizer, AutoConfig, BitsAndBytesConfig
+import gc
+import time
 
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
+
 def build_transform(input_size):
     MEAN, STD = IMAGENET_MEAN, IMAGENET_STD
-    transform = T.Compose([
-        T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
-        T.Resize((input_size, input_size), interpolation=InterpolationMode.BICUBIC),
-        T.ToTensor(),
-        T.Normalize(mean=MEAN, std=STD)
-    ])
+    transform = T.Compose(
+        [
+            T.Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
+            T.Resize((input_size, input_size), interpolation=InterpolationMode.BICUBIC),
+            T.ToTensor(),
+            T.Normalize(mean=MEAN, std=STD),
+        ]
+    )
     return transform
 
+
 def find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_size):
-    best_ratio_diff = float('inf')
+    best_ratio_diff = float("inf")
     best_ratio = (1, 1)
     area = width * height
     for ratio in target_ratios:
@@ -37,19 +43,25 @@ def find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_
                 best_ratio = ratio
     return best_ratio
 
+
 def dynamic_preprocess(image, min_num=1, max_num=12, image_size=448, use_thumbnail=False):
     orig_width, orig_height = image.size
     aspect_ratio = orig_width / orig_height
 
     # calculate the existing image aspect ratio
     target_ratios = set(
-        (i, j) for n in range(min_num, max_num + 1) for i in range(1, n + 1) for j in range(1, n + 1) if
-        i * j <= max_num and i * j >= min_num)
+        (i, j)
+        for n in range(min_num, max_num + 1)
+        for i in range(1, n + 1)
+        for j in range(1, n + 1)
+        if i * j <= max_num and i * j >= min_num
+    )
     target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
 
     # find the closest aspect ratio to the target
     target_aspect_ratio = find_closest_aspect_ratio(
-        aspect_ratio, target_ratios, orig_width, orig_height, image_size)
+        aspect_ratio, target_ratios, orig_width, orig_height, image_size
+    )
 
     # calculate the target width and height
     target_width = image_size * target_aspect_ratio[0]
@@ -57,31 +69,33 @@ def dynamic_preprocess(image, min_num=1, max_num=12, image_size=448, use_thumbna
     blocks = target_aspect_ratio[0] * target_aspect_ratio[1]
 
     # resize the image
-    resized_img = image.resize((target_width, target_height))
+    resized_img = image.resize((target_width, target_height), Image.LANCZOS)
     processed_images = []
     for i in range(blocks):
         box = (
             (i % (target_width // image_size)) * image_size,
             (i // (target_width // image_size)) * image_size,
             ((i % (target_width // image_size)) + 1) * image_size,
-            ((i // (target_width // image_size)) + 1) * image_size
+            ((i // (target_width // image_size)) + 1) * image_size,
         )
         # split the image
         split_img = resized_img.crop(box)
         processed_images.append(split_img)
     assert len(processed_images) == blocks
     if use_thumbnail and len(processed_images) != 1:
-        thumbnail_img = image.resize((image_size, image_size))
+        thumbnail_img = image.resize((image_size, image_size), Image.LANCZOS)
         processed_images.append(thumbnail_img)
     return processed_images
 
+
 def load_image(image_file, input_size=448, max_num=12):
-    image = Image.open(image_file).convert('RGB')
+    image = Image.open(image_file).convert("RGB")
     transform = build_transform(input_size=input_size)
     images = dynamic_preprocess(image, image_size=input_size, use_thumbnail=True, max_num=max_num)
     pixel_values = [transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
     return pixel_values
+
 
 def split_model(model_path):
     device_map = {}
@@ -95,25 +109,31 @@ def split_model(model_path):
     layer_cnt = 0
     for i, num_layer in reversed(list(enumerate(num_layers_per_gpu))):
         for j in range(num_layer):
-            device_map[f'language_model.model.layers.{layer_cnt}'] = i
+            device_map[f"language_model.model.layers.{layer_cnt}"] = i
             layer_cnt += 1
-    device_map['vision_model'] = 0
-    device_map['mlp1'] = 0
-    device_map['language_model.model.tok_embeddings'] = 0
-    device_map['language_model.model.embed_tokens'] = 0
-    device_map['language_model.output'] = 0
-    device_map['language_model.model.norm'] = 0
-    device_map['language_model.model.rotary_emb'] = 0
-    device_map['language_model.lm_head'] = 0
-    device_map[f'language_model.model.layers.{num_layers - 1}'] = 0
+    device_map["vision_model"] = 0
+    device_map["mlp1"] = 0
+    device_map["language_model.model.tok_embeddings"] = 0
+    device_map["language_model.model.embed_tokens"] = 0
+    device_map["language_model.output"] = 0
+    device_map["language_model.model.norm"] = 0
+    device_map["language_model.model.rotary_emb"] = 0
+    device_map["language_model.lm_head"] = 0
 
     return device_map
 
+
 # If you set `load_in_8bit=True`, you will need two 80GB GPUs.
 # If you set `load_in_8bit=False`, you will need at least three 80GB GPUs.
-model_path = 'OpenGVLab/InternVL3-78B'
-device_map = split_model(model_path)  # 'InternVL3-78B')
-quantization_config = BitsAndBytesConfig(load_in_8bit=True,)
+model_path = "OpenGVLab/InternVL3-78B"
+device_map = split_model(model_path)
+
+quantization_config = BitsAndBytesConfig(
+    load_in_8bit=True,
+    bnb_8bit_compute_dtype=torch.bfloat16,
+    bnb_8bit_use_double_quant=True,  # 더 나은 메모리 효율성
+)
+
 model = AutoModel.from_pretrained(
     model_path,
     torch_dtype=torch.bfloat16,
@@ -121,11 +141,16 @@ model = AutoModel.from_pretrained(
     low_cpu_mem_usage=True,
     use_flash_attn=True,
     trust_remote_code=True,
-    device_map=device_map).eval()
+    device_map=device_map,
+).eval()
+try:
+    model = torch.compile(model, mode="reduce-overhead")
+except Exception:
+    print("Failed to compile model. Continuing without compilation.")
+
 tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
 
-# video multi-round conversation
 def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
     if bound:
         start, end = bound[0], bound[1]
@@ -134,17 +159,17 @@ def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
     start_idx = max(first_idx, round(start * fps))
     end_idx = min(round(end * fps), max_frame)
     seg_size = float(end_idx - start_idx) / num_segments
-    frame_indices = np.array([
-        int(start_idx + (seg_size / 2) + np.round(seg_size * idx))
-        for idx in range(num_segments)
-    ])
+    frame_indices = np.array(
+        [int(start_idx + (seg_size / 2) + np.round(seg_size * idx)) for idx in range(num_segments)]
+    )
     return frame_indices
+
 
 def load_video(video_path, bound=None, input_size=448, max_num=2, num_segments=32, max_segments=30):
     # max_num : max number of split per frame
     max_num = max(1, max_num)
 
-    vr = VideoReader(video_path, ctx=cpu(0), num_threads=1)
+    vr = VideoReader(video_path, ctx=cpu(0), num_threads=4)
     max_frame = len(vr) - 1
     fps = float(vr.get_avg_fps())
 
@@ -156,8 +181,9 @@ def load_video(video_path, bound=None, input_size=448, max_num=2, num_segments=3
     pixel_values_list, num_patches_list = [], []
     transform = build_transform(input_size=input_size)
     frame_indices = get_index(bound, fps, max_frame, first_idx=0, num_segments=num_segments)
+
     for frame_index in frame_indices:
-        img = Image.fromarray(vr[frame_index].asnumpy()).convert('RGB')
+        img = Image.fromarray(vr[frame_index].asnumpy()).convert("RGB")
         img = dynamic_preprocess(img, image_size=input_size, use_thumbnail=False, max_num=max_num)
         pixel_values = [transform(tile) for tile in img]
         pixel_values = torch.stack(pixel_values)
@@ -167,50 +193,59 @@ def load_video(video_path, bound=None, input_size=448, max_num=2, num_segments=3
     return pixel_values, num_patches_list
 
 
-def process_multiple_videos(video_paths, model, tokenizer, generation_config, **video_kwargs):
-    """
-    Process videos one by one (TRUE pipeline parallelism)
-    Memory stays constant regardless of video count
-    """
+@torch.inference_mode()
+def process_multiple_videos_optimized(
+    video_paths, model, tokenizer, generation_config, **video_kwargs
+):
     results = []
-    
+
     for i, video_path in enumerate(video_paths):
-        print(f"Processing video {i+1}/{len(video_paths)}: {os.path.basename(video_path)}")
-        
-        # Load ONE video at a time (not all together!)
+        print(f"Processing video {i + 1}/{len(video_paths)}: {os.path.basename(video_path)}")
+        start_time = time.time()
+
         pixel_values, num_patches_list = load_video(video_path, **video_kwargs)
-        pixel_values = pixel_values.to(torch.bfloat16).cuda()
-        
-        # Create question for this single video
-        video_prefix = ''.join([f'Frame{j+1}: <image>\n' for j in range(len(num_patches_list))])
-        
+        pixel_values = pixel_values.to(torch.bfloat16, non_blocking=True).cuda()
+
+        video_prefix = "".join([f"Frame{j + 1}: <image>\n" for j in range(len(num_patches_list))])
         question = video_prefix + user_question_new
-        
-        # Process through your pipeline-parallel model
+
         response = model.chat(
-            tokenizer, 
-            pixel_values, 
-            question, 
+            tokenizer,
+            pixel_values,
+            question,
             generation_config,
-            num_patches_list=num_patches_list, 
-            history=None, 
-            return_history=False
+            num_patches_list=num_patches_list,
+            history=None,
+            return_history=False,
         )
-        
-        results.append({
-            'video': os.path.basename(video_path),
-            'response': response
-        })
-        
-        print(f'A: {response}\n')
-        
-        # Important: Clear memory after each video
+
+        processing_time = time.time() - start_time
+        results.append(
+            {
+                "video": os.path.basename(video_path),
+                "response": response,
+                "processing_time": processing_time,
+            }
+        )
+
+        print(f"A: {response}")
+        print(f"Processing time: {processing_time:.2f}s\n")
+
+        # 메모리 정리
         del pixel_values, num_patches_list, response
         torch.cuda.empty_cache()
-    
+        gc.collect()
+
     return results
 
-generation_config = dict(max_new_tokens=1024, do_sample=True)
+
+# 더 효율적인 generation config
+generation_config = dict(
+    max_new_tokens=1024,
+    do_sample=True,
+    temperature=0.7,  # 조금 더 보수적
+    top_p=0.9,
+)
 
 user_question_new = """Given the media, output a detailed analysis of how you analyzed the scene in JSON format. 
 You should conduct an analysis of what you see and how each component interacts with each other.
@@ -232,11 +267,11 @@ Follow this JSON structure exactly:
       "regional_analysis": [
         {
           "region": "region name from planning stage",
-          "observations": ["detailed analysis point 1", "detailed analysis point 2"]
+          "observations or analysis": ["detailed analysis point 1", "detailed analysis point 2"]
         }
       ],
       "overall_scene": {
-        "observations": ["overall scene analysis points"]
+        "observations or analysis": ["overall scene analysis points"]
       }
     },
     "conclusion": {
@@ -249,7 +284,7 @@ IMPORTANT:
 - Response must be valid JSON only
 - Include only few major regions of interest
 - During reasoning, follow natural reasoning flow - if you discover something new or need to reconsider, express it naturally (e.g., "Aha,", "Wait,", "Actually...", "Looking more carefully..."). Only use such expressions when there's a genuine reasoning transition, not artificially.
-- Each observation should be specific and detailed
+- Each observation or analysis should combine specific visual details with interpretive reasoning
 - For video content, note any significant temporal changes or developments naturally within your observations"""
 
 
@@ -259,23 +294,31 @@ IMPORTANT:
 video_path = "/workspace/vss-engine/samples/untitled/"
 video_paths = [
     os.path.join(video_path, "37.mp4"),
-    os.path.join(video_path, "36.mp4"), 
-    os.path.join(video_path, "35.mp4"), 
-    os.path.join(video_path, "34.mp4")
+    os.path.join(video_path, "36.mp4"),
+    os.path.join(video_path, "35.mp4"),
+    os.path.join(video_path, "34.mp4"),
 ]
-results = process_multiple_videos(
-    video_paths, 
-    model, 
-    tokenizer, 
-    generation_config,
-    num_segments=30,
-    max_num=2
+
+print("Starting optimized video processing...")
+start_total = time.time()
+
+results = process_multiple_videos_optimized(
+    video_paths, model, tokenizer, generation_config, num_segments=30, max_num=2
 )
 
-for result in results:
-    video_name = result['video']
-    response = result['response']
+total_time = time.time() - start_total
 
-    print(f'Video: {video_name}\nA:\n {response}')
+print(f"\n=== Processing Summary ===")
+print(f"Total videos: {len(results)}")
+print(f"Total time: {total_time:.2f}s")
+print(f"Average per video: {total_time / len(results):.2f}s")
+
+
+for result in results:
+    video_name = result["video"]
+    response = result["response"]
+    proc_time = result["processing_time"]
+    print(f"\nVideo: {video_name} ({proc_time:.2f}s)")
+    # print(f'Response: {response[:100]}...')
 
 print("=== Experiment done! ===")
