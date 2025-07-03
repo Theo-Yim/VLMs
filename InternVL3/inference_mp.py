@@ -1,15 +1,15 @@
-import os
-import torch
+import gc
 import math
+import os
+import time
+
 import numpy as np
+import torch
 import torchvision.transforms as T
 from decord import VideoReader, cpu
 from PIL import Image
 from torchvision.transforms.functional import InterpolationMode
-from transformers import AutoModel, AutoTokenizer, AutoConfig, BitsAndBytesConfig
-import gc
-import time
-
+from transformers import AutoConfig, AutoModel, AutoTokenizer
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
@@ -107,7 +107,7 @@ def split_model(model_path):
     num_layers_per_gpu = [num_layers_per_gpu] * world_size
     num_layers_per_gpu[0] = math.ceil(num_layers_per_gpu[0] * 0.5)
     layer_cnt = 0
-    for i, num_layer in reversed(list(enumerate(num_layers_per_gpu))):
+    for i, num_layer in enumerate(num_layers_per_gpu):
         for j in range(num_layer):
             device_map[f"language_model.model.layers.{layer_cnt}"] = i
             layer_cnt += 1
@@ -123,21 +123,22 @@ def split_model(model_path):
     return device_map
 
 
+# 더 효율적인 generation config
+generation_config = dict(
+    max_new_tokens=2048,
+    do_sample=True,
+    temperature=0.8,
+    top_p=0.9,
+)
 # If you set `load_in_8bit=True`, you will need two 80GB GPUs.
 # If you set `load_in_8bit=False`, you will need at least three 80GB GPUs.
 model_path = "OpenGVLab/InternVL3-78B"
 device_map = split_model(model_path)
 
-quantization_config = BitsAndBytesConfig(
-    load_in_8bit=True,
-    bnb_8bit_compute_dtype=torch.bfloat16,
-    bnb_8bit_use_double_quant=True,  # 더 나은 메모리 효율성
-)
-
 model = AutoModel.from_pretrained(
     model_path,
     torch_dtype=torch.bfloat16,
-    quantization_config=quantization_config,
+    load_in_8bit=True,
     low_cpu_mem_usage=True,
     use_flash_attn=True,
     trust_remote_code=True,
@@ -165,7 +166,9 @@ def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
     return frame_indices
 
 
-def load_video(video_path, bound=None, input_size=448, max_num=2, num_segments=32, max_segments=30):
+def load_video(
+    video_path, bound=None, input_size=448, max_num=2, num_segments=None, max_segments=50
+):
     # max_num : max number of split per frame
     max_num = max(1, max_num)
 
@@ -194,9 +197,7 @@ def load_video(video_path, bound=None, input_size=448, max_num=2, num_segments=3
 
 
 @torch.inference_mode()
-def process_multiple_videos_optimized(
-    video_paths, model, tokenizer, generation_config, **video_kwargs
-):
+def process_multiple_videos_optimized(video_paths, model, tokenizer, **video_kwargs):
     results = []
 
     for i, video_path in enumerate(video_paths):
@@ -204,10 +205,10 @@ def process_multiple_videos_optimized(
         start_time = time.time()
 
         pixel_values, num_patches_list = load_video(video_path, **video_kwargs)
-        pixel_values = pixel_values.to(torch.bfloat16, non_blocking=True).cuda()
+        pixel_values = pixel_values.to(torch.bfloat16).cuda()
 
         video_prefix = "".join([f"Frame{j + 1}: <image>\n" for j in range(len(num_patches_list))])
-        question = video_prefix + user_question_new
+        question = video_prefix + user_question
 
         response = model.chat(
             tokenizer,
@@ -239,58 +240,37 @@ def process_multiple_videos_optimized(
     return results
 
 
-# 더 효율적인 generation config
-generation_config = dict(
-    max_new_tokens=1024,
-    do_sample=True,
-    temperature=0.7,  # 조금 더 보수적
-    top_p=0.9,
-)
-
-user_question_new = """Given the media, output a detailed analysis of how you analyzed the scene in JSON format. 
-You should conduct an analysis of what you see and how each component interacts with each other.
+user_question = """Given the media, output a detailed analysis of how you analyzed the scene in JSON format. 
+Conduct an analysis of what you see and how each component interacts with each other.
 
 Follow this JSON structure exactly:
 
 {
-  "analysis": {
-    "planning": {
-      "regions_of_interest": [
-        {
-          "category": "noun_category (e.g., person, car, dog)",
-          "description": "noun phrase with short participial phrase",
-          "relevance": "why this region is important for understanding the scene"
-        }
-      ]
-    },
-    "reasoning": {
-      "regional_analysis": [
-        {
-          "region": "region name from planning stage",
-          "observations or analysis": ["detailed analysis point 1", "detailed analysis point 2"]
-        }
-      ],
-      "overall_scene": {
-        "observations or analysis": ["overall scene analysis points"]
-      }
-    },
-    "conclusion": {
-      "comprehensive_analysis": "comprehensive and detailed summary assembling all reasoning"
-    }
+ "planning": {
+  "ROI": [
+   {"category": "noun_category (e.g., person, car, dog)", "description": "noun phrase with short participial phrase and appearance"},
+  ]
+ },
+ "reasoning": {
+  "regional_analysis": [
+   {"region": "region name from planning stage, sequentially",
+    "observations or analysis": ["detailed analysis point 1", "detailed analysis point 2"]}
+  ],
+  "overall_scene": {
+   "observations or analysis": ["overall scene analysis points"]
   }
+ },
+ "conclusion": {
+ "comprehensive_analysis": "comprehensive and detailed summary assembling all reasoning"
+ }
 }
 
 IMPORTANT: 
-- Response must be valid JSON only
-- Include only few major regions of interest
+- Include only few major regions of interest (ROI).
 - During reasoning, follow natural reasoning flow - if you discover something new or need to reconsider, express it naturally (e.g., "Aha,", "Wait,", "Actually...", "Looking more carefully..."). Only use such expressions when there's a genuine reasoning transition, not artificially.
 - Each observation or analysis should combine specific visual details with interpretive reasoning
 - For video content, note any significant temporal changes or developments naturally within your observations"""
 
-
-#####
-# if True:
-# Load multiple videos
 video_path = "/workspace/vss-engine/samples/untitled/"
 video_paths = [
     os.path.join(video_path, "37.mp4"),
@@ -303,7 +283,7 @@ print("Starting optimized video processing...")
 start_total = time.time()
 
 results = process_multiple_videos_optimized(
-    video_paths, model, tokenizer, generation_config, num_segments=30, max_num=2
+    video_paths, model, tokenizer, num_segments=None, max_num=2
 )
 
 total_time = time.time() - start_total
