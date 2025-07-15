@@ -1,4 +1,5 @@
 import math
+import os
 
 import numpy as np
 import torch
@@ -6,7 +7,6 @@ import torchvision.transforms as T
 from decord import VideoReader, cpu
 from PIL import Image
 from torchvision.transforms.functional import InterpolationMode
-
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
@@ -85,8 +85,16 @@ def dynamic_preprocess(image, min_num=1, max_num=12, image_size=448, use_thumbna
     return processed_images
 
 
-def load_image(image_file, input_size=448, max_num=12):
-    image = Image.open(image_file).convert("RGB")
+def load_image(image_file, max_num=12, input_size=448):
+    # Add file existence check
+    if not os.path.exists(image_file):
+        raise FileNotFoundError(f"Image file not found: {image_file}")
+
+    try:
+        image = Image.open(image_file).convert("RGB")
+    except Exception as e:
+        raise ValueError(f"Cannot open image {image_file}: {str(e)}")
+
     transform = build_transform(input_size=input_size)
     images = dynamic_preprocess(image, image_size=input_size, use_thumbnail=True, max_num=max_num)
     pixel_values = [transform(image) for image in images]

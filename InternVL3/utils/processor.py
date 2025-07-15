@@ -5,6 +5,8 @@ from transformers import AutoConfig, AutoModel, AutoTokenizer
 def split_model(model_path):
     device_map = {}
     world_size = torch.cuda.device_count()
+    if world_size == 0:
+        raise RuntimeError("No CUDA devices available")
     config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
     num_layers = config.llm_config.num_hidden_layers
     # Since the first GPU will be used for ViT, treat it as half a GPU.
