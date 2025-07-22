@@ -1,35 +1,18 @@
 """
 This script is simple inference code for InternVL3. But it is not up-to-date.
 """
-import math
 
 import torch
-from transformers import AutoConfig, AutoModel, AutoTokenizer
+
+from InternVL3.utils.constants import generation_config
 from InternVL3.utils.preprocess import load_image, load_video
-from InternVL3.utils.processor import split_model
+from InternVL3.utils.processor import load_models, split_model
 
-
-generation_config = dict(max_new_tokens=2048, do_sample=True)
-# If you set `load_in_8bit=True`, you will need two 80GB GPUs.
-# If you set `load_in_8bit=False`, you will need at least three 80GB GPUs.
 model_path = "OpenGVLab/InternVL3-78B"
 device_map = split_model(model_path)
+model, tokenizer = load_models(model_path, device_map)
+# ==================================================
 
-model = AutoModel.from_pretrained(
-    model_path,
-    torch_dtype=torch.bfloat16,
-    load_in_8bit=True,
-    low_cpu_mem_usage=True,
-    use_flash_attn=True,
-    trust_remote_code=True,
-    device_map=device_map,
-).eval()
-try:
-    model = torch.compile(model, mode="reduce-overhead")
-except Exception:
-    print("Failed to compile model. Continuing without compilation.")
-
-tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
 if False:
     # set the max number of tiles in `max_num`

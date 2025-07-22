@@ -82,7 +82,7 @@ def process_images_batch(img_paths, model, tokenizer, json_output_path, batch_si
 
         processing_time = time.time() - start_time
         logging.info(
-            f"Processed {len(num_patches_list)} images of batch {i + 1}/{len(img_path_batch)} in {processing_time:.2f}s"
+            f"Processed {len(num_patches_list)} images of batch {i//batch_size + 1} in {processing_time:.2f}s"
         )
         num_success += len(num_patches_list)
 

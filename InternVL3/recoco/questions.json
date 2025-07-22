@@ -1,0 +1,15 @@
+[
+  {
+    "image_path": "data_tmp/sample_test/inanam-taipan - closeup1.jpg",
+    "question": "<image>\nImage has these objects with bboxes:\n- Person: [72, 39, 279, 588]\n- shelf: [0, 0, 95, 187]\n\nQuestion: \"What color is the shirt?\"\nGenerate reasoning that focuses on relevant regions. When focusing on the region, use the format \"Region: <region_name> <bbox>.\"",
+    "response": "# Region: Person [72, 39, 279, 588]. The shirt being referred to is worn by the person within this bounding box. Observing the portion of the image that covers the person's torso reveals that the shirt is predominantly red in color."
+  },
+  {
+    "image_path": "data_tmp/sample_test/COCO_train2014_000000549347_7.jpg",
+    "question": "<image>\nPlease carefully observe BBox (x, y, ...) and come up with a caption for the area."
+  },
+  {
+    "image_path": "data_tmp/sample_test/COCO_train2014_000000549366_1.jpg",
+    "question": "<image>\nYou are performing \"Multimodal Interleaved Reasoning\". During the thinking process, you need to keep an eye on the visual cues in the original image, find regions of the image that help answer the question, and use the \"Crop\" tool to crop and zoom in for detailed analysis.\nWhen using the tool, you must output a JSON object in the following format:\n{\"bbox_2d\": [x1, y1, x2, y2]}\nEnsure that you \"Crop\" at least once.\nContinue thinking after each operation until you reach the final answer. Output the thinking process within a pair of <think> </think> tags and then output the final answer within a pair of <answer> </answer> tags.\nQuestion: What portion of the scene is visible from zebra 2's perspective? (context: zebra 2 is the zebra on the left side of the image, partially cut off, with coordinates [0, 202, 114, 218.])\nAnswer: The visible portion suggests this individual is positioned near the group at the table, likely part of the social setting."
+  }
+]
