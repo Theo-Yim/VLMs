@@ -1,5 +1,6 @@
 data_tmp/
 .vscode/
+*.pkl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
