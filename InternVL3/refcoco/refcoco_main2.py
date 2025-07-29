@@ -140,16 +140,23 @@ class RefCOCOProcessor:
         device_map = split_model(model_path)
         self.model, self.tokenizer = load_models(model_path, device_map)
         self.description_merger = DescriptionMerger()
+
+        self.q1_prompt = """<image>
+Image has these objects with bboxes and descriptions:
+{ann}
+Create two or three questions from the visuals of the {target_obj}. Generate a detailed reasoning from the visual clue or visual relationships, focusing on the region, and based on reasoning, give me final answer. Do not explicitly mention numberred object name or the presence of the descriptions in your response.
+Output format: {{Question: ...\nReasoning: ...\nAnswer: ...}}"""
         
         self.question_2_comm = """<image>
 ##Object names with descriptions
 {anno}
+Since there are many objects, you should use them enough to create a well-aligned response.
 ##
-You are performing "Multimodal Interleaved Reasoning". During the thinking process, you need to keep an eye on the visual cues in the original image, find regions of the image that help answer the question, and use the "Crop" tool to crop and zoom in for detailed analysis.
+You are performing "Multimodal Interleaved Reasoning". During the thinking process, keep an eye on the visual cues in the original image, identify regions that help answer the question, and use the "Crop" tool to crop and zoom in for detailed analysis.
 When using the tool, you must output a JSON object in the following format:
-{{Crop (object name)}}
-Ensure that you "Crop" at least once. If you crop the region including multiple objects, list them with commas. For example, {{Crop person 1, desk 3}}, {{Crop person 2}}.
-Continue thinking after each operation until you reach the final answer. Output the thinking process within a pair of <think> </think> tags and then output the final answer within a pair of <answer> </answer> tags. Do not use numbered object name outside the crop tool, but use noun phrase with description instead.
+{{Crop (object name w number)}}
+Ensure that you "Crop" at least once. You can simultaneously crop multiple adjacent objects to inspect them sufficiently. If you crop the region including multiple objects, list them with commas. For example, {{Crop person 1, desk 3}}, {{Crop person 2}}.
+Continue thinking after each operation until you reach the final answer. Output the thinking process within a pair of <think> </think> tags and then output the final answer within a pair of <answer> </answer> tags. Do not use an object name with a number outside the crop tool, but use a noun phrase with a description instead.
 Question: {question}"""
         
         self.question_2_followup = "Check your previous answer, if it has logical error, or misuse of Crop tool, or wrong format. After you fix those, give me final answer"
@@ -218,11 +225,9 @@ Question: {question}"""
                 data_entry = {
                     "image_path": data['image_path'],
                     "image_id": image_id,
-                    "anno": anno_string,
+                    "annos_str": anno_string,
                     "annotations": merged_annotations,
-                    "questions": [],
-                    "responses_1": [],
-                    "responses_2": []
+                    "QnA": [],
                 }
                 final_data.append(data_entry)
         
@@ -318,49 +323,43 @@ Question: {question}"""
     def generate_initial_questions(self, data_list):
         """Generate initial questions for each object"""
         print("Generating initial questions...")
-        
+
         for data_entry in tqdm(data_list, desc="Processing images"):
             image_path = data_entry["image_path"]
-            anno = data_entry["anno"]
-            
+            anno = data_entry["annos_str"]
+
             try:
                 pixel_values = load_image(os.path.join(self.dataset_p_root, image_path), max_num=12).to(torch.bfloat16).cuda()
             except Exception as e:
                 print(f"Error loading {image_path}: {e}")
                 continue
-            
+
             # Generate questions for each object
-            object_counter = defaultdict(int)
-            all_questions = []
-            all_answers = []
-            
-            for ann in data_entry["annotations"]:
-                category = ann['category']
-                object_counter[category] += 1
-                obj_num = object_counter[category]
+            all_qna = list()
+
+            for ann in anno.split('- '):
+                if len(ann) < 1:
+                    continue
                 
-                bbox_str = f"[{ann['bbox'][0]}, {ann['bbox'][1]}, {ann['bbox'][2]}, {ann['bbox'][3]}]"
-                
+                target_obj = ann[:ann.find(' [')+1].strip()
                 # Enhanced question prompt that mentions the quality of merged referring expressions
-                question_prompt = f"""<image>
-Image has these objects with bboxes and descriptions:
-{anno}
-Create two or three questions from the visuals of the {category} {obj_num} {bbox_str}. Generate a detailed reasoning from the visual clue or visual relationships, focusing on the region, and based on reasoning, give me final answer. Do not explicitly mention numberred object name or the presence of the descriptions in your response.
-Output format: {{Question: ...\nReasoning: ...\nAnswer: ...}}"""
-                
+                prompt_1 = self.q1_prompt.format(ann=anno, target_obj=target_obj)
+
                 try:
-                    response = self.model.chat(self.tokenizer, pixel_values, question_prompt, generation_config)
+                    response = self.model.chat(self.tokenizer, pixel_values, prompt_1, generation_config)
                     questions = self.extract_questions_n_answers_from_response(response, lookfor='Question')
                     answers = self.extract_questions_n_answers_from_response(response, lookfor='Answer')
-                    all_questions.extend(questions)
-                    all_answers.extend(answers)
+                    qna1 = [{"Q": q1, "A1": a1.strip('}'), "A2": '', "A3": ''} for q1, a1 in zip(questions, answers)]
+                    all_qna.extend(qna1)
+                    # all_questions.extend(questions)
+                    # all_answers.extend(answers)
                 except Exception as e:
                     print(f"Error generating questions: {e}")
                     continue
-            
-            data_entry["questions"] = all_questions
-            data_entry["responses_1"] = all_answers
-        
+
+            data_entry["QnA"] = all_qna
+            # data_entry["responses_1"] = all_answers
+
         return data_list
     
     def extract_questions_n_answers_from_response(self, response, lookfor="Question"):
@@ -399,7 +398,7 @@ Output format: {{Question: ...\nReasoning: ...\nAnswer: ...}}"""
         
         for data_entry in tqdm(data_list, desc="Detailed responses"):
             image_path = data_entry["image_path"]
-            anno = data_entry["anno"]
+            anno = data_entry["annos_str"]
             
             try:
                 pixel_values = load_image(os.path.join(self.dataset_p_root, image_path), max_num=12).to(torch.bfloat16).cuda()
@@ -407,35 +406,31 @@ Output format: {{Question: ...\nReasoning: ...\nAnswer: ...}}"""
                 print(f"Error loading {image_path}: {e}")
                 continue
             
-            detailed_responses = []
+            responses_2 = []
             
-            for question in data_entry["questions"]:
-                if not question.strip():
+            for qna in data_entry["QnA"]:
+                if not qna.strip():
                     continue
                 
                 try:
+                    question = qna["Q"]
                     # Remove bbox from annotation string for this prompt
                     anno_for_prompt = re.sub(r' \[[^\]]*\]', '', anno)
                     # Initial detailed response
-                    prompt_1 = self.question_2_comm.format(anno=anno_for_prompt, question=question)
-                    response_1, history = self.model.chat(
-                        self.tokenizer, pixel_values, prompt_1, generation_config, return_history=True
-                    )
-                    
-                    # Follow-up refinement
-                    response_2 = self.model.chat(self.tokenizer, pixel_values, self.question_2_followup, generation_config, history=history)
-                    
-                    detailed_responses.append({
-                        "question": question,
-                        "initial_response": response_1,
-                        "final_response": response_2
-                    })
+                    prompt_2 = self.question_2_comm.format(anno=anno_for_prompt, question=question)
                     
                 except Exception as e:
-                    print(f"Error in detailed response for '{question}': {e}")
+                    print(f"Error formatting '{anno}': {e}")
                     continue
+                response_2 = self.model.chat(self.tokenizer, pixel_values, prompt_2, generation_config) # , return_history=True)
+                
+                # # Follow-up refinement
+                # response_3 = self.model.chat(self.tokenizer, pixel_values, self.question_2_followup, generation_config, history=history)
+                
+                responses_2.append(response_2)
+                qna["A2"] = response_2.strip()
             
-            data_entry["responses_2"] = detailed_responses
+            # data_entry["responses_2"] = responses_2
         
         return data_list
     
@@ -458,14 +453,15 @@ Output format: {{Question: ...\nReasoning: ...\nAnswer: ...}}"""
             json_entry = {
                 "image_path": entry["image_path"],
                 "image_id": entry["image_id"],
-                "anno": entry["anno"],
+                "annos_str": entry["annos_str"],
                 "merge_info": {
                     "total_objects": len(entry["annotations"]),
                     "objects_with_merged_expressions": sum(1 for ann in entry["annotations"] if ann.get('merged_from', 1) > 1),
                     "dataset_sources": list(set(source for ann in entry["annotations"] 
                                                for source in ann.get('dataset_sources', [])))
                 },
-                "questions_and_responses": entry["responses_2"]
+                "questions": entry["questions"],
+                "vlm_responses": entry["responses_2"]
             }
             json_output.append(json_entry)
         
@@ -515,6 +511,8 @@ def main():
     data_list = processor.load_datasets()
     print(f"Loaded {len(data_list)} unique images with merged referring expressions")
     
+    data_list = data_list[:2] # For testing, limit to first 2 images
+
     # Generate initial questions
     data_list = processor.generate_initial_questions(data_list)
     
