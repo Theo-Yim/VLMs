@@ -150,21 +150,34 @@ Create two or three questions from the visuals of the {category} {obj_num} {bbox
         
         return data_list
     
-    def extract_questions_from_response(self, response):
+    def extract_questions_n_answers_from_response(self, response, lookfor="Question"):
         """Extract individual questions from model response"""
-        questions = []
+        # Primary pattern: Looks for "Question:" on one line and the question on the next.
+        pattern = rf"^(?:#+\s*)?{re.escape(lookfor)}.*?\n(.*?)$"
+        matches = re.findall(pattern, response, re.MULTILINE | re.IGNORECASE)
+        questions = [match.strip() for match in matches if match.strip()]
+
+        # If the primary pattern doesn't find anything, use fallbacks.
+        if not questions:
+            # Fallback 1: Look for lines containing "question" and a colon.
+            fb1_questions = [line.strip()[line.find(':') + 1:].strip()
+                             for line in response.split('\n')
+                             if lookfor.lower() in line.lower()]
+            questions = [q for q in fb1_questions if q]
         
-        # Look for numbered questions
-        pattern = r'\d+\.\s*(.+?)(?=\d+\.|$)'
-        matches = re.findall(pattern, response, re.DOTALL | re.MULTILINE)
-        
-        if matches:
-            questions = [match.strip() for match in matches]
-        else:
-            # Fallback: split by lines
-            lines = [line.strip() for line in response.split('\n') if line.strip() and not line.strip().startswith('#')]
+        if not questions:
+            # Fallback 2: Look for numbered list questions (e.g., "1. What is...")
+            pattern = r'\d+\.\s*(.+?)(?=\d+\.|$)'
+            matches = re.findall(pattern, response, re.DOTALL | re.MULTILINE)
+            if matches:
+                questions = [match.strip() for match in matches]
+
+        if not questions:
+            # Fallback 3: Look for any line with a question mark.
+            lines = [line.strip() for line in response.split('\n')
+                     if line.strip() and not line.strip().startswith('#') and '?' in line]
             questions = lines[:3]  # Limit to 3 questions
-        
+
         return questions
     
     def generate_detailed_responses(self, data_list):
@@ -188,8 +201,10 @@ Create two or three questions from the visuals of the {category} {obj_num} {bbox
                     continue
                 
                 try:
+                    # Remove bbox from annotation string for this prompt
+                    anno_for_prompt = re.sub(r' \[[^\]]*\]', '', anno)
                     # Initial detailed response
-                    prompt_1 = self.question_2_comm.format(anno=anno, question=question)
+                    prompt_1 = self.question_2_comm.format(anno=anno_for_prompt, question=question)
                     response_1, history = self.model.chat(
                         self.tokenizer, pixel_values, prompt_1, generation_config, return_history=True
                     )

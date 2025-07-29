@@ -156,9 +156,10 @@ Question: {question}"""
     
     def get_image_id_from_path(self, image_path):
         """Extract image ID from path for deduplication"""
-        # Example: COCO_train2014_000000549347_7.jpg -> 549347
-        import re
-        match = re.search(r'COCO_\w+_(\d+)', image_path)
+        # Example: coco/train2017/000000549347.jpg -> 549347
+        # import re
+        # match = re.search(r'COCO_\w+_(\d+)', image_path)
+        match = re.search(r'(\d+)\.jpg', image_path)
         return match.group(1) if match else image_path
     
     def load_datasets(self):
@@ -179,6 +180,7 @@ Question: {question}"""
             for split in dataset.keys():
                 for sample in tqdm(dataset[split], desc=f"Processing {dataset_name}/{split}"):
                     image_path = sample["image_path"]
+                    image_path = image_path.replace('train2014/COCO_train2014_', 'train2017/') # Temporary code because of the local foldername issue.
                     image_id = self.get_image_id_from_path(image_path)
                     
                     # Get category from category_id using COCO mapping
@@ -219,7 +221,8 @@ Question: {question}"""
                     "anno": anno_string,
                     "annotations": merged_annotations,
                     "questions": [],
-                    "responses": []
+                    "responses_1": [],
+                    "responses_2": []
                 }
                 final_data.append(data_entry)
         
@@ -329,6 +332,7 @@ Question: {question}"""
             # Generate questions for each object
             object_counter = defaultdict(int)
             all_questions = []
+            all_answers = []
             
             for ann in data_entry["annotations"]:
                 category = ann['category']
@@ -341,36 +345,52 @@ Question: {question}"""
                 question_prompt = f"""<image>
 Image has these objects with bboxes and descriptions:
 {anno}
-Create two or three questions from the visuals of the {category} {obj_num} {bbox_str}. Generate a detailed reasoning from the visual clue or visual relationships, focusing on the region, and based on reasoning, give me final answer. Do not explicitly write the descriptions in your response."""
+Create two or three questions from the visuals of the {category} {obj_num} {bbox_str}. Generate a detailed reasoning from the visual clue or visual relationships, focusing on the region, and based on reasoning, give me final answer. Do not explicitly mention numberred object name or the presence of the descriptions in your response.
+Output format: {{Question: ...\nReasoning: ...\nAnswer: ...}}"""
                 
                 try:
                     response = self.model.chat(self.tokenizer, pixel_values, question_prompt, generation_config)
-                    questions = self.extract_questions_from_response(response)
+                    questions = self.extract_questions_n_answers_from_response(response, lookfor='Question')
+                    answers = self.extract_questions_n_answers_from_response(response, lookfor='Answer')
                     all_questions.extend(questions)
+                    all_answers.extend(answers)
                 except Exception as e:
                     print(f"Error generating questions: {e}")
                     continue
             
             data_entry["questions"] = all_questions
+            data_entry["responses_1"] = all_answers
         
         return data_list
     
-    def extract_questions_from_response(self, response):
+    def extract_questions_n_answers_from_response(self, response, lookfor="Question"):
         """Extract individual questions from model response"""
-        questions = []
+        # Primary pattern: Looks for "Question:" on one line and the question on the next.
+        pattern = rf"^(?:#+\s*)?{re.escape(lookfor)}.*?\n(.*?)$"
+        matches = re.findall(pattern, response, re.MULTILINE | re.IGNORECASE)
+        questions = [match.strip() for match in matches if match.strip()]
+
+        # If the primary pattern doesn't find anything, use fallbacks.
+        if not questions:
+            # Fallback 1: Look for lines containing "question" and a colon.
+            fb1_questions = [line.strip()[line.find(':') + 1:].strip()
+                             for line in response.split('\n')
+                             if lookfor.lower() in line.lower()]
+            questions = [q for q in fb1_questions if q]
         
-        # Look for numbered questions
-        pattern = r'\d+\.\s*(.+?)(?=\d+\.|$)'
-        matches = re.findall(pattern, response, re.DOTALL | re.MULTILINE)
-        
-        if matches:
-            questions = [match.strip() for match in matches]
-        else:
-            # Fallback: split by lines
-            lines = [line.strip() for line in response.split('\n') 
-                    if line.strip() and not line.strip().startswith('#') and '?' in line]
+        if not questions:
+            # Fallback 2: Look for numbered list questions (e.g., "1. What is...")
+            pattern = r'\d+\.\s*(.+?)(?=\d+\.|$)'
+            matches = re.findall(pattern, response, re.DOTALL | re.MULTILINE)
+            if matches:
+                questions = [match.strip() for match in matches]
+
+        if not questions:
+            # Fallback 3: Look for any line with a question mark.
+            lines = [line.strip() for line in response.split('\n')
+                     if line.strip() and not line.strip().startswith('#') and '?' in line]
             questions = lines[:3]  # Limit to 3 questions
-        
+
         return questions
     
     def generate_detailed_responses(self, data_list):
@@ -394,16 +414,16 @@ Create two or three questions from the visuals of the {category} {obj_num} {bbox
                     continue
                 
                 try:
+                    # Remove bbox from annotation string for this prompt
+                    anno_for_prompt = re.sub(r' \[[^\]]*\]', '', anno)
                     # Initial detailed response
-                    prompt_1 = self.question_2_comm.format(anno=anno, question=question)
+                    prompt_1 = self.question_2_comm.format(anno=anno_for_prompt, question=question)
                     response_1, history = self.model.chat(
                         self.tokenizer, pixel_values, prompt_1, generation_config, return_history=True
                     )
                     
                     # Follow-up refinement
-                    response_2, _ = self.model.chat(
-                        self.tokenizer, pixel_values, self.question_2_followup, generation_config, history=history
-                    )
+                    response_2 = self.model.chat(self.tokenizer, pixel_values, self.question_2_followup, generation_config, history=history)
                     
                     detailed_responses.append({
                         "question": question,
@@ -415,7 +435,7 @@ Create two or three questions from the visuals of the {category} {obj_num} {bbox
                     print(f"Error in detailed response for '{question}': {e}")
                     continue
             
-            data_entry["responses"] = detailed_responses
+            data_entry["responses_2"] = detailed_responses
         
         return data_list
     
@@ -445,7 +465,7 @@ Create two or three questions from the visuals of the {category} {obj_num} {bbox
                     "dataset_sources": list(set(source for ann in entry["annotations"] 
                                                for source in ann.get('dataset_sources', [])))
                 },
-                "questions_and_responses": entry["responses"]
+                "questions_and_responses": entry["responses_2"]
             }
             json_output.append(json_entry)
         
@@ -500,6 +520,8 @@ def main():
     
     # Generate detailed responses
     data_list = processor.generate_detailed_responses(data_list)
+
+    # Generate object_localization questions and responses
     
     # Save results
     results = processor.save_results(data_list)

@@ -27,7 +27,14 @@ data_refcoco = [
     },
 ]
 
-question_1 = """Create a couple of questions from the visuals of the {object}."""
+question_1 = """<image>
+Create a couple of questions from the visuals of the {object}."""
+
+question_1_2 = """<image>
+Image has these objects with bboxes and descriptions:
+{anno}
+Create two or three questions from the visuals of the {category} {obj_num} {bbox_str}. Generate a detailed reasoning from the visual clue or visual relationships, focusing on the region, and based on reasoning, give me final answer. Do not explicitly mention numberred object name or the presence of the descriptions in your response.
+Output format: {{Question: ...\nReasoning: ...\nAnswer: ...}}"""
 
 # question_1_2 = """Create a few questions from the visuals of the {object}. 
 # Fisrt step is to write your plan. Suppose that you have crop tool and you can use it by refering the object above like {Crop object}. For example, you can say "to give an answer to the given question, I need to focus on .... There seems ... and I will crop and zoom in the person 1 to investigate more. {Crop person 1}."
