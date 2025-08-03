@@ -29,7 +29,12 @@ from InternVL3.utils.processor import load_models, split_model
 
 class RefCOCOProcessor:
     def __init__(self, model_path="OpenGVLab/InternVL3-78B"):
-        self.dataset_p_root = "/mnt/data/"
+        if os.path.exists("/mnt/nas3/Data/coco"):
+            self.dataset_p_root = "/mnt/nas3/Data/"
+        elif os.path.exists("/mnt/data/coco"):
+            self.dataset_p_root = "/mnt/data/"
+        else:
+            raise FileNotFoundError(f"Error! coco path not exists")
         print("Initializing model...")
         device_map = split_model(model_path)
         self.model, self.tokenizer = load_models(model_path, device_map)
@@ -37,7 +42,7 @@ class RefCOCOProcessor:
         self.q1_prompt = """<image>
 Image has these objects with bboxes and descriptions:
 {ann}
-Create two or three questions from the visuals of the {target_obj}. Generate a detailed reasoning from the visual clue or visual relationships, focusing on the region, and based on reasoning, give me final answer. Do not explicitly mention numberred object name or the presence of the descriptions in your response.
+Create two questions from the visuals of the {target_obj}. Generate a detailed reasoning from the visual clue or visual relationships, focusing on the region, and based on reasoning, give me final answer. Do not explicitly mention numberred object name or the presence of the descriptions in your response.
 Output format: {{Question: ...\nReasoning: ...\nAnswer: ...}}"""
 
         self.q2_prompt = """<image>
@@ -191,9 +196,6 @@ Question: {question}"""
             responses_2 = []
 
             for qna in data_entry["QnA"]:
-                if not qna.strip():
-                    continue
-
                 try:
                     question = qna["Q"]
                     # Remove bbox from annotation string for this prompt
@@ -256,8 +258,7 @@ Question: {question}"""
                         )
                     ),
                 },
-                "questions": entry["questions"],
-                "vlm_responses": entry["responses_2"],
+                "QnA": entry["QnA"],
             }
             json_output.append(json_entry)
 
@@ -276,17 +277,17 @@ Question: {question}"""
                 f.write("    {\n")
                 f.write(f'        "image_path": "{entry["image_path"]}",\n')
                 f.write(f'        "image_id": "{entry["image_id"]}",\n')
-                f.write(f'        "anno": """\n{entry["anno"]}\n""",\n')
+                f.write(f'        "anno": """\n{entry["annos_str"]}\n""",\n')
                 f.write(f'        "merge_info": {entry["merge_info"]},\n')
                 f.write('        "questions": [')
 
-                questions = [qr["question"] for qr in entry["questions_and_responses"]]
+                questions = [qr["Q"] for qr in entry["QnA"]]
                 f.write(", ".join([f'"{q}"' for q in questions]))
                 f.write("],\n")
 
                 f.write('        "responses": [\n')
-                for qr in entry["questions_and_responses"]:
-                    f.write(f'            """{qr["final_response"]}""",\n')
+                for qr in entry["QnA"]:
+                    f.write(f'            """{qr["A2"]}""",\n')
                 f.write("        ]\n")
 
                 f.write("    },\n" if i < len(json_output) - 1 else "    }\n")
@@ -312,7 +313,7 @@ def main():
     data_list = processor.load_datasets()
     print(f"Loaded {len(data_list)} unique images with merged referring expressions")
 
-    data_list = data_list[:2]  # For testing, limit to first 2 images
+    # data_list = data_list[:360]  # For testing, limit to first 2 images
 
     # Generate initial questions
     data_list = processor.generate_initial_questions(data_list)
@@ -326,7 +327,7 @@ def main():
     results = processor.save_results(data_list)
 
     # Print final statistics
-    total_questions = sum(len(entry["questions_and_responses"]) for entry in results)
+    total_questions = sum(len(entry["QnA"]) for entry in results)
     print(f"\nFinal Statistics:")
     print(f"Unique images: {len(results)}")
     print(f"Total questions: {total_questions}")

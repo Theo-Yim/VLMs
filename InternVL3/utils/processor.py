@@ -2,6 +2,11 @@ import math
 import torch
 from transformers import AutoConfig, AutoModel, AutoTokenizer
 
+import logging
+
+logging.getLogger("transformers").setLevel(logging.ERROR)
+
+
 def split_model(model_path):
     device_map = {}
     world_size = torch.cuda.device_count()
@@ -15,9 +20,9 @@ def split_model(model_path):
     num_layers_per_gpu[0] = math.ceil(num_layers_per_gpu[0] * 0.5)
 
     # TODO: check this Manually adjusted numbers
-    if world_size >=4:
+    if world_size >= 4:
         num_layers_per_gpu[0] -= (world_size - 2)
-        for i in range(1, world_size-1):
+        for i in range(1, world_size - 1):
             num_layers_per_gpu[i] += 1
 
     layer_cnt = 0
@@ -27,9 +32,9 @@ def split_model(model_path):
             layer_cnt += 1
     device_map["vision_model"] = 0
     device_map["mlp1"] = 0
-    device_map["language_model.model.tok_embeddings"] = 0
+    device_map["language_model.model.tok_embeddings"] = 0  # seems not exist in 78B
     device_map["language_model.model.embed_tokens"] = 0
-    device_map["language_model.output"] = 0
+    device_map["language_model.output"] = 0  # seems not exist in 78B
     device_map["language_model.model.norm"] = 0
     device_map["language_model.model.rotary_emb"] = 0
     device_map["language_model.lm_head"] = 0
@@ -67,7 +72,7 @@ def split_model_for_group(model_path, gpu_group: list):
     return device_map
 
 
-def load_models(model_path = "OpenGVLab/InternVL3-78B", device_map:list=None):
+def load_models(model_path="OpenGVLab/InternVL3-78B", device_map: list = None):
     # If you set `load_in_8bit=True`, you will need two 80GB GPUs.
     # If you set `load_in_8bit=False`, you will need at least three 80GB GPUs.
     # model_path = "OpenGVLab/InternVL3-78B"
