@@ -11,23 +11,16 @@ This approach:
 3. Generates enhanced questions and multimodal reasoning responses
 
 Note: Run merge_refcoco_datasets.py first to create the merged dataset file.
-
-This version:
-- processes entire images step-by-step and saves the entire results in a single JSON file
 """
-
 import json
 import os
 import pickle
 import re
 
 import torch
-from tqdm import tqdm
-
-# Your InternVL3 imports
 from InternVL3.utils.constants import generation_config
-from InternVL3.utils.preprocess import load_image
 from InternVL3.utils.processor_utils import load_models, split_model
+from InternVL3.utils.openai_client import create_messages, call_api, call_apis
 
 
 class RefCOCOProcessor:
@@ -92,62 +85,75 @@ Question: {question}"""
 
         return data_list
 
-    def generate_initial_questions(self, data_list):
+    def generate_initial_questions(self, data_entry, pixel_values):
         """Generate initial questions for each object"""
-        print("Generating initial questions...")
+        anno = data_entry["annos_str"]
+        all_qna = list()
 
-        for data_entry in tqdm(data_list, desc="Processing images"):
-            image_path = data_entry["image_path"]
-            anno = data_entry["annos_str"]
-
-            try:
-                pixel_values = (
-                    load_image(os.path.join(self.dataset_p_root, image_path), max_num=12)
-                    .to(torch.bfloat16)
-                    .cuda()
-                )
-            except Exception as e:
-                print(f"Error loading {image_path}: {e}")
+        for ann in anno.split("- "):
+            if len(ann) < 1:
                 continue
 
-            # Generate questions for each object
-            all_qna = list()
+            target_obj = ann[: ann.find(" [") + 1].strip()
+            prompt_1 = self.q1_prompt.format(ann=anno, target_obj=target_obj)
+            response = self.model.chat(self.tokenizer, pixel_values, prompt_1, generation_config)
+            questions = self.parse_qna_from_response(response, lookfor="Question")
+            answers = self.parse_qna_from_response(response, lookfor="Answer")
+            qna1 = [
+                {"Q": q1, "A1": a1.strip("}"), "A2": "", "A3": ""}
+                for q1, a1 in zip(questions, answers)
+            ]
+            all_qna.extend(qna1)
 
-            for ann in anno.split("- "):
-                if len(ann) < 1:
-                    continue
+        data_entry["QnA"] = all_qna
+        return
 
-                target_obj = ann[: ann.find(" [") + 1].strip()
-                # Enhanced question prompt that mentions the quality of merged referring expressions
-                prompt_1 = self.q1_prompt.format(ann=anno, target_obj=target_obj)
+    def generate_initial_questions_b(self, data_entry, pixel_values, batch_size=2):
+        """Generate initial questions for each object in batch"""
+        anno = data_entry["annos_str"]
+        all_qna = list()
 
-                try:
-                    response = self.model.chat(
-                        self.tokenizer, pixel_values, prompt_1, generation_config
-                    )
-                    questions = self.extract_questions_n_answers_from_response(
-                        response, lookfor="Question"
-                    )
-                    answers = self.extract_questions_n_answers_from_response(
-                        response, lookfor="Answer"
-                    )
+        index = 0
+
+        for i, ann in enumerate(anno.split("- ")):
+            if len(ann) < 1:
+                continue
+
+            if index == 0:
+                target_objs = [ann[: ann.find(" [") + 1].strip()]
+                prompt_1s = [self.q1_prompt.format(ann=anno, target_obj=target_objs[-1])]
+            elif index < batch_size:
+                target_objs.append(ann[: ann.find(" [") + 1].strip())
+                prompt_1s.append(self.q1_prompt.format(ann=anno, target_obj=target_objs[-1]))
+
+            if index == batch_size - 1 or i == len(anno.split("- ")) - 1:
+                num_patches_list = [pixel_values.size(0)] * len(prompt_1s)
+                pixel_values = [pixel_values] * len(prompt_1s)
+                pixel_values = torch.cat(pixel_values, dim=0)
+                responses = self.model.batch_chat(
+                    self.tokenizer,
+                    pixel_values,
+                    num_patches_list=num_patches_list,
+                    questions=prompt_1s,
+                    generation_config=generation_config,
+                )
+                for response in responses:
+                    questions = self.parse_qna_from_response(response, lookfor="Question")
+                    answers = self.parse_qna_from_response(response, lookfor="Answer")
                     qna1 = [
                         {"Q": q1, "A1": a1.strip("}"), "A2": "", "A3": ""}
                         for q1, a1 in zip(questions, answers)
                     ]
                     all_qna.extend(qna1)
-                    # all_questions.extend(questions)
-                    # all_answers.extend(answers)
-                except Exception as e:
-                    print(f"Error generating questions: {e}")
-                    continue
 
-            data_entry["QnA"] = all_qna
-            # data_entry["responses_1"] = all_answers
+            index += 1
+            if index == batch_size:
+                index = 0
 
-        return data_list
+        data_entry["QnA"] = all_qna
+        return
 
-    def extract_questions_n_answers_from_response(self, response, lookfor="Question"):
+    def parse_qna_from_response(self, response, lookfor="Question"):
         """Extract individual questions from model response"""
         # Primary pattern: Looks for "Question:" on one line and the question on the next.
         pattern = rf"^(?:#+\s*)?{re.escape(lookfor)}.*?\n(.*?)$"
@@ -182,98 +188,66 @@ Question: {question}"""
 
         return questions
 
-    def generate_detailed_responses(self, data_list):
+    def generate_detailed_responses(self, data_entry, pixel_values):
         """Generate detailed responses with multimodal reasoning"""
-        print("Generating detailed responses...")
+        anno = data_entry["annos_str"]
+        for qna in data_entry["QnA"]:
+            question = qna["Q"]
+            # Remove bbox from annotation string for this prompt
+            anno_for_prompt = re.sub(r" \[[^\]]*\]", "", anno)
+            prompt_2 = self.q2_prompt.format(anno=anno_for_prompt, question=question)
+            response_2 = self.model.chat(self.tokenizer, pixel_values, prompt_2, generation_config)
+            qna["A2"] = response_2.strip()
+        return
 
-        for data_entry in tqdm(data_list, desc="Detailed responses"):
-            image_path = data_entry["image_path"]
-            anno = data_entry["annos_str"]
+    def generate_detailed_responses_b(self, data_entry, pixel_values, batch_size=2):
+        """Generate detailed responses in batch with multimodal reasoning"""
 
-            try:
-                pixel_values = (
-                    load_image(os.path.join(self.dataset_p_root, image_path), max_num=12)
-                    .to(torch.bfloat16)
-                    .cuda()
+        anno = data_entry["annos_str"]
+        # Remove bbox from annotation string for this prompt
+        anno_for_prompt = re.sub(r" \[[^\]]*\]", "", anno)
+
+        index = 0
+        answers = list()
+
+        for i, qna in enumerate(data_entry["QnA"]):
+            if index == 0:
+                question = qna["Q"]
+                # Initial detailed response
+                prompt_2s = [self.q2_prompt.format(anno=anno_for_prompt, question=question)]
+            elif index < batch_size:
+                question = qna["Q"]
+                prompt_2s.append(self.q2_prompt.format(anno=anno_for_prompt, question=question))
+
+            if index == batch_size - 1 or i == len(data_entry["QnA"]) - 1:
+                num_patches_list = [pixel_values.size(0)] * len(prompt_2s)
+                pixel_values = [pixel_values] * len(prompt_2s)
+                pixel_values = torch.cat(pixel_values, dim=0)
+                responses = self.model.batch_chat(
+                    self.tokenizer,
+                    pixel_values,
+                    num_patches_list=num_patches_list,
+                    questions=prompt_2s,
+                    generation_config=generation_config,
                 )
-            except Exception as e:
-                print(f"Error loading {image_path}: {e}")
-                continue
+                answers.extend(responses)
+            index += 1
+            if index == batch_size:
+                index = 0
 
-            responses_2 = []
+        for qna, response_2 in zip(data_entry["QnA"], answers):
+            qna["A2"] = response_2.strip()
 
-            for qna in data_entry["QnA"]:
-                try:
-                    question = qna["Q"]
-                    # Remove bbox from annotation string for this prompt
-                    anno_for_prompt = re.sub(r" \[[^\]]*\]", "", anno)
-                    # Initial detailed response
-                    prompt_2 = self.q2_prompt.format(anno=anno_for_prompt, question=question)
+        return
 
-                except Exception as e:
-                    print(f"Error formatting '{anno}': {e}")
-                    continue
-                response_2 = self.model.chat(
-                    self.tokenizer, pixel_values, prompt_2, generation_config
-                )  # , return_history=True)
-
-                # # Follow-up refinement
-                # response_3 = self.model.chat(self.tokenizer, pixel_values, self.question_2_followup, generation_config, history=history)
-
-                responses_2.append(response_2)
-                qna["A2"] = response_2.strip()
-
-            # data_entry["responses_2"] = responses_2
-
-        return data_list
-
-    def save_results(self, data_list, output_prefix="refcoco_merged_results"):
+    def save_results(self, data_entry, output_path):
         """Save results with merge statistics"""
-        print("Saving results...")
 
-        # Calculate merge statistics
-        total_merged = sum(
-            1
-            for entry in data_list
-            for ann in entry["annotations"]
-            if ann.get("merged_from", 1) > 1
-        )
-        total_annotations = sum(len(entry["annotations"]) for entry in data_list)
-
-        print(f"Merge Statistics:")
-        print(f"Total objects: {total_annotations}")
-        print(f"Objects with merged referring expressions: {total_merged}")
-        print(f"Merge rate: {total_merged / total_annotations * 100:.1f}%")
-
-        # JSON format with merge info
-        json_output = []
-        for entry in data_list:
-            json_entry = {
-                "image_path": entry["image_path"],
-                "image_id": entry["image_id"],
-                "annos_str": entry["annos_str"],
-                "merge_info": {
-                    "total_objects": len(entry["annotations"]),
-                    "objects_with_merged_expressions": sum(
-                        1 for ann in entry["annotations"] if ann.get("merged_from", 1) > 1
-                    ),
-                    "dataset_sources": list(
-                        set(
-                            source
-                            for ann in entry["annotations"]
-                            for source in ann.get("dataset_sources", [])
-                        )
-                    ),
-                },
-                "QnA": entry["QnA"],
-            }
-            json_output.append(json_entry)
-
-        with open(f"{output_prefix}.json", "w", encoding="utf-8") as f:
-            json.dump(json_output, f, indent=2, ensure_ascii=False)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(data_entry, f, indent=2, ensure_ascii=False)
 
         # # Python format
-        # with open(f"{output_prefix}.py", "w", encoding="utf-8") as f:
+        # with open(output_path + ".py", "w", encoding="utf-8") as f:
         #     f.write("# RefCOCO dataset with intelligent merging of referring expressions\n")
         #     f.write(
         #         f"# Merge statistics: {total_merged}/{total_annotations} objects have merged referring expressions\n\n"
@@ -300,45 +274,5 @@ Question: {question}"""
 
         #     f.write("]\n")
 
-        # print(f"Results saved to {output_prefix}.json and {output_prefix}.py")
+        # print(f"Results saved to {data_entry["image_id"]}.json")
         return
-
-
-def main():
-    """
-    Main execution function
-
-    Key insight: RefCOCO datasets share the same COCO annotations (identical bboxes),
-    but have different referring expressions. We merge these expressions rather than bboxes.
-
-    Note: Run merge_refcoco_datasets.py first to create the merged dataset file.
-    """
-    processor = RefCOCOProcessor(model_path="OpenGVLab/InternVL3-38B")
-
-    # Load pre-merged datasets
-    data_list = processor.load_datasets()
-    print(f"Loaded {len(data_list)} unique images with merged referring expressions")
-
-    # data_list = data_list[:360]  # For testing, limit to first 2 images
-
-    # Generate initial questions
-    data_list = processor.generate_initial_questions(data_list)
-
-    # Generate detailed responses
-    data_list = processor.generate_detailed_responses(data_list)
-
-    # Generate object_localization questions and responses
-
-    # Save results
-    processor.save_results(data_list)
-
-    # # Print final statistics
-    # total_questions = sum(len(entry["QnA"]) for entry in results)
-    # print(f"\nFinal Statistics:")
-    # print(f"Unique images: {len(results)}")
-    # print(f"Total questions: {total_questions}")
-    # print(f"Average questions per image: {total_questions / len(results):.2f}")
-
-
-if __name__ == "__main__":
-    main()

@@ -27,7 +27,7 @@ def main():
 
     # Load pre-merged datasets
     data_list = processor.load_datasets()
-
+    data_list = data_list[:int(len(data_list) * 0.1)]  # For testing, use only 10% of the dataset
     print(f"Loaded {len(data_list)} unique images with merged referring expressions")
 
     for data_entry in tqdm(data_list, desc="Processing images"):

@@ -1,5 +1,7 @@
 import math
 import os
+from io import BytesIO
+from urllib.request import urlopen
 
 import numpy as np
 import torch
@@ -85,7 +87,7 @@ def dynamic_preprocess(image, min_num=1, max_num=12, image_size=448, use_thumbna
     return processed_images
 
 
-def load_image(image_file, max_num=12, input_size=448):
+def load_image(image_file, max_num=12, input_size=448, use_thumbnail=False):
     # Add file existence check
     if not os.path.exists(image_file):
         raise FileNotFoundError(f"Image file not found: {image_file}")
@@ -96,10 +98,20 @@ def load_image(image_file, max_num=12, input_size=448):
         raise ValueError(f"Cannot open image {image_file}: {str(e)}")
 
     transform = build_transform(input_size=input_size)
-    images = dynamic_preprocess(image, image_size=input_size, use_thumbnail=True, max_num=max_num)
+    images = dynamic_preprocess(image, image_size=input_size, use_thumbnail=use_thumbnail, max_num=max_num)
     pixel_values = [transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
     return pixel_values
+
+
+def load_image_from_url(image_url: str) -> Image.Image:
+    if os.path.isfile(image_url):
+        pil_image = Image.open(image_url).convert("RGB")
+    else:
+        image_bin = urlopen(image_url).read()
+        pil_image = Image.open(BytesIO(image_bin)).convert("RGB")
+    # print(f"{image_url}: {pil_image.width}x{pil_image.height}")
+    return pil_image
 
 
 def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
