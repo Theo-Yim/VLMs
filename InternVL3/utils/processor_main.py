@@ -12,23 +12,25 @@ This approach:
 
 Note: Run merge_refcoco_datasets.py first to create the merged dataset file.
 """
+
 import json
 import os
 import pickle
 import re
+from pathlib import Path
 
 import torch
+
 from InternVL3.utils.constants import generation_config
 from InternVL3.utils.processor_utils import load_models, split_model
-from InternVL3.utils.openai_client import create_messages, call_api, call_apis
 
 
 class RefCOCOProcessor:
-    def __init__(self, model_path="OpenGVLab/InternVL3-38B"):
-        if os.path.exists("/mnt/nas3/Data/coco"):
-            self.dataset_p_root = "/mnt/nas3/Data/"
-        elif os.path.exists("/mnt/data/coco"):
-            self.dataset_p_root = "/mnt/data/"
+    def __init__(self, model_path="OpenGVLab/InternVL3-38B", output_path="/mnt/nas3/Data/coco"):
+        if os.path.exists(output_path):
+            self.dataset_p_root = str(Path(output_path).parent)
+        elif os.path.exists(output_path.replace("nas3/Data", "nas1/data")):
+            self.dataset_p_root = str(Path(output_path.replace("nas3/Data", "nas1/data")).parent)
         else:
             raise FileNotFoundError(f"Error! coco path not exists")
         self.output_folder = os.path.join(self.dataset_p_root, "coco", "refcoco_vlm_results_theo")
@@ -86,9 +88,11 @@ Question: {question}"""
         return data_list
 
     def generate_initial_questions(self, data_entry, pixel_values):
-        """Generate initial questions for each object"""
+        """Generate initial questions for each object in batch
+        Return: the number of inferences."""
         anno = data_entry["annos_str"]
         all_qna = list()
+        num_infer = 0
 
         for ann in anno.split("- "):
             if len(ann) < 1:
@@ -97,6 +101,7 @@ Question: {question}"""
             target_obj = ann[: ann.find(" [") + 1].strip()
             prompt_1 = self.q1_prompt.format(ann=anno, target_obj=target_obj)
             response = self.model.chat(self.tokenizer, pixel_values, prompt_1, generation_config)
+            num_infer += 1
             questions = self.parse_qna_from_response(response, lookfor="Question")
             answers = self.parse_qna_from_response(response, lookfor="Answer")
             qna1 = [
@@ -106,15 +111,17 @@ Question: {question}"""
             all_qna.extend(qna1)
 
         data_entry["QnA"] = all_qna
-        return
+        return num_infer
 
     def generate_initial_questions_b(self, data_entry, pixel_values, batch_size=2):
-        """Generate initial questions for each object in batch"""
+        """Generate initial questions for each object in batch
+        Return: the number of inferences & the number of total samples (<= inference x batch_size)."""
         anno = data_entry["annos_str"]
         all_qna = list()
+        num_infer = 0
+        total_samples = 0
 
         index = 0
-
         for i, ann in enumerate(anno.split("- ")):
             if len(ann) < 1:
                 continue
@@ -137,6 +144,8 @@ Question: {question}"""
                     questions=prompt_1s,
                     generation_config=generation_config,
                 )
+                num_infer += 1
+                total_samples += len(responses)
                 for response in responses:
                     questions = self.parse_qna_from_response(response, lookfor="Question")
                     answers = self.parse_qna_from_response(response, lookfor="Answer")
@@ -151,7 +160,7 @@ Question: {question}"""
                 index = 0
 
         data_entry["QnA"] = all_qna
-        return
+        return num_infer, total_samples
 
     def parse_qna_from_response(self, response, lookfor="Question"):
         """Extract individual questions from model response"""
