@@ -22,7 +22,7 @@ from pathlib import Path
 import torch
 
 from InternVL3.utils.constants import generation_config
-from InternVL3.utils.processor_utils import load_models, split_model
+from InternVL3.utils.processor_utils import load_llm_model, load_models, split_model
 
 
 class RefCOCOProcessor:
@@ -38,8 +38,11 @@ class RefCOCOProcessor:
             os.makedirs(self.output_folder)
 
         print("Initializing model...")
-        device_map = split_model(model_path)
-        self.model, self.tokenizer = load_models(model_path, device_map)
+        if model_path.split("/")[0] == "Qwen":
+            self.model, self.tokenizer, self.sampling_params = load_llm_model(model_path)
+        else:
+            device_map = split_model(model_path)
+            self.model, self.tokenizer = load_models(model_path, device_map)
 
         self.q1_prompt = """<image>
 Image has these objects with bboxes and descriptions:
@@ -60,6 +63,19 @@ Continue thinking after each operation until you reach the final answer. Output 
 Question: {question}"""
 
         self.question_2_followup = "Check your previous answer, if it has logical error, or misuse of Crop tool, or wrong format. After you fix those, give me final answer"
+
+        self.q3_prompt = """Refine the response below:
+
+I will provide the original question and model's response. Original question includes object annotations, commands, and question at the end. The response includes thought process to reach to the answer to the question at the end of the original question. Model is meant to generate response only from visuals, not descriptions. Thus, existence of object annotations should not be mentioned in the response, and they should be rephrased. Response can include {{crop (object with number)}}, but be aware that crop (object with description) is invalid. Response should not mention object with number except for crop tool. Therefore, response should be fixed. Give me the fixed version of response.
+
+# Original Question:
+##Object names with descriptions
+{prompt_2}
+
+# Response:
+{response_1}
+"""
+        return
 
     def load_datasets(self, merged_data_file="merged_refcoco_data.pkl"):
         """Load pre-merged RefCOCO datasets"""
@@ -87,7 +103,7 @@ Question: {question}"""
 
         return data_list
 
-    def generate_initial_questions(self, data_entry, pixel_values):
+    def generate_initial_questions(self, data_entry, pixels):
         """Generate initial questions for each object in batch
         Return: the number of inferences."""
         anno = data_entry["annos_str"]
@@ -100,7 +116,8 @@ Question: {question}"""
 
             target_obj = ann[: ann.find(" [") + 1].strip()
             prompt_1 = self.q1_prompt.format(ann=anno, target_obj=target_obj)
-            response = self.model.chat(self.tokenizer, pixel_values, prompt_1, generation_config)
+            with torch.inference_mode():
+                response = self.model.chat(self.tokenizer, pixels, prompt_1, generation_config)
             num_infer += 1
             questions = self.parse_qna_from_response(response, lookfor="Question")
             answers = self.parse_qna_from_response(response, lookfor="Answer")
@@ -113,7 +130,7 @@ Question: {question}"""
         data_entry["QnA"] = all_qna
         return num_infer
 
-    def generate_initial_questions_b(self, data_entry, pixel_values, batch_size=2):
+    def generate_initial_questions_b(self, data_entry, pixels, batch_size=2):
         """Generate initial questions for each object in batch
         Return: the number of inferences & the number of total samples (<= inference x batch_size)."""
         anno = data_entry["annos_str"]
@@ -134,16 +151,17 @@ Question: {question}"""
                 prompt_1s.append(self.q1_prompt.format(ann=anno, target_obj=target_objs[-1]))
 
             if index == batch_size - 1 or i == len(anno.split("- ")) - 1:
-                num_patches_list = [pixel_values.size(0)] * len(prompt_1s)
-                pixel_values = [pixel_values] * len(prompt_1s)
-                pixel_values = torch.cat(pixel_values, dim=0)
-                responses = self.model.batch_chat(
-                    self.tokenizer,
-                    pixel_values,
-                    num_patches_list=num_patches_list,
-                    questions=prompt_1s,
-                    generation_config=generation_config,
-                )
+                num_patches_list = [pixels.size(0)] * len(prompt_1s)
+                pixels = [pixels] * len(prompt_1s)
+                pixels = torch.cat(pixels, dim=0)
+                with torch.inference_mode():
+                    responses = self.model.batch_chat(
+                        self.tokenizer,
+                        pixels,
+                        num_patches_list=num_patches_list,
+                        questions=prompt_1s,
+                        generation_config=generation_config,
+                    )
                 num_infer += 1
                 total_samples += len(responses)
                 for response in responses:
@@ -197,7 +215,7 @@ Question: {question}"""
 
         return questions
 
-    def generate_detailed_responses(self, data_entry, pixel_values):
+    def generate_detailed_responses(self, data_entry, pixels):
         """Generate detailed responses with multimodal reasoning"""
         anno = data_entry["annos_str"]
         for qna in data_entry["QnA"]:
@@ -205,11 +223,12 @@ Question: {question}"""
             # Remove bbox from annotation string for this prompt
             anno_for_prompt = re.sub(r" \[[^\]]*\]", "", anno)
             prompt_2 = self.q2_prompt.format(anno=anno_for_prompt, question=question)
-            response_2 = self.model.chat(self.tokenizer, pixel_values, prompt_2, generation_config)
+            with torch.inference_mode():
+                response_2 = self.model.chat(self.tokenizer, pixels, prompt_2, generation_config)
             qna["A2"] = response_2.strip()
         return
 
-    def generate_detailed_responses_b(self, data_entry, pixel_values, batch_size=2):
+    def generate_detailed_responses_b(self, data_entry, pixels, batch_size=2):
         """Generate detailed responses in batch with multimodal reasoning"""
 
         anno = data_entry["annos_str"]
@@ -229,16 +248,17 @@ Question: {question}"""
                 prompt_2s.append(self.q2_prompt.format(anno=anno_for_prompt, question=question))
 
             if index == batch_size - 1 or i == len(data_entry["QnA"]) - 1:
-                num_patches_list = [pixel_values.size(0)] * len(prompt_2s)
-                pixel_values = [pixel_values] * len(prompt_2s)
-                pixel_values = torch.cat(pixel_values, dim=0)
-                responses = self.model.batch_chat(
-                    self.tokenizer,
-                    pixel_values,
-                    num_patches_list=num_patches_list,
-                    questions=prompt_2s,
-                    generation_config=generation_config,
-                )
+                num_patches_list = [pixels.size(0)] * len(prompt_2s)
+                pixels = [pixels] * len(prompt_2s)
+                pixels = torch.cat(pixels, dim=0)
+                with torch.inference_mode():
+                    responses = self.model.batch_chat(
+                        self.tokenizer,
+                        pixels,
+                        num_patches_list=num_patches_list,
+                        questions=prompt_2s,
+                        generation_config=generation_config,
+                    )
                 answers.extend(responses)
             index += 1
             if index == batch_size:
@@ -247,6 +267,54 @@ Question: {question}"""
         for qna, response_2 in zip(data_entry["QnA"], answers):
             qna["A2"] = response_2.strip()
 
+        return
+
+    def generate_llm_responses(self, data_entry):
+        """Refine the responses with reasoning using QWEN3-30B-A3B"""
+        anno = data_entry["annos_str"]
+        for qna in data_entry["QnA"]:
+            if "A3" in qna and len(qna["A3"]) > 100:
+                continue
+
+            question = qna["Q"]
+            # Remove bbox from annotation string for this prompt
+            anno_for_prompt = re.sub(r" \[[^\]]*\]", "", anno)
+            prompt_2 = self.q2_prompt.format(anno=anno_for_prompt, question=question)
+            prompt_2 = prompt_2.strip("<image>\n")
+            prompt_3 = self.q3_prompt.format(prompt_2=prompt_2, response_1=qna["A2"])
+
+            # Generate response using QWEN3-30B-A3B
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that refines multimodal reasoning responses.",
+                },
+                {"role": "user", "content": prompt_3},
+            ]
+            # Tokenize and generate
+            prompt = self.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            with torch.inference_mode():
+                outputs = self.model.generate(prompt, self.sampling_params)
+            qna["A3"] = outputs[0].outputs[0].text
+            # Below is the code using transformers.
+            # model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.model.device)
+            # with torch.no_grad():
+            #     generated_ids = self.model.generate(
+            #         **model_inputs,
+            #         max_new_tokens=2048,
+            #         do_sample=True,
+            #         temperature=0.6,
+            #         top_p=0.95,
+            #         top_k=20,
+            #         min_p=0.0,
+            #         pad_token_id=self.tokenizer.eos_token_id
+            #     )
+            # generated_ids = generated_ids[0][len(model_inputs.input_ids[0]):]
+            # response_3 = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+
+            # qna["A3"] = response_3.strip()
         return
 
     def save_results(self, data_entry, output_path):

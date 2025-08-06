@@ -2,7 +2,7 @@ import logging
 import math
 
 import torch
-from transformers import AutoConfig, AutoModel, AutoTokenizer
+from transformers import AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -18,11 +18,6 @@ def split_model(model_path):
     num_layers_per_gpu = math.ceil(num_layers / (world_size - 0.5))
     num_layers_per_gpu = [num_layers_per_gpu] * world_size
     num_layers_per_gpu[0] = int(num_layers - (num_layers_per_gpu[0] * (world_size - 1)))
-    # num_layers_per_gpu[0] = math.ceil(num_layers_per_gpu[0] * 0.5)
-
-    assert num_layers == sum(num_layers_per_gpu), (
-        f"Total layers {num_layers} does not match split {sum(num_layers_per_gpu)}"
-    )
 
     # TODO: check this Manually adjusted numbers
     if world_size >= 4:
@@ -33,6 +28,10 @@ def split_model(model_path):
     elif world_size == 2:
         num_layers_per_gpu[0] += 5
         num_layers_per_gpu[1] -= 5
+
+    assert num_layers == sum(num_layers_per_gpu), (
+        f"Total layers {num_layers} does not match split {sum(num_layers_per_gpu)}"
+    )
 
     device_map["vision_model"] = 0
     device_map["mlp1"] = 0
@@ -122,6 +121,42 @@ def load_models(model_path="OpenGVLab/InternVL3-78B", device_map: list = None):
     except Exception:
         print("Failed to compile model. Continuing without compilation.")
 
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_path, trust_remote_code=True, use_fast=False
+    )
 
     return model, tokenizer
+
+
+def load_llm_model(model_path="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8"):
+    # Initialize QWEN3-30B-A3B model for LLM responses
+    print("Initializing QWEN3-30B-A3B model...")
+
+    import os
+    from vllm import LLM, SamplingParams
+
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "2" # This is for testing.
+    # Initialize vLLM with your FP8 model
+    model = LLM(model="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8", )
+
+    # Configure sampling
+    sampling_params = SamplingParams(
+        temperature=0.6,
+        top_p=0.95,
+        top_k=20,
+        min_p=0.0,
+        max_tokens=32768,
+        stop=["<|im_end|>", "</think>"]
+    )
+
+    # model = AutoModelForCausalLM.from_pretrained(
+    #     model_path, torch_dtype="auto", device_map=3, trust_remote_code=True
+    # ).eval()
+    # torch.set_grad_enabled(False)
+    # # try: # No need to compile for Qwen
+    # #     model = torch.compile(model, mode="reduce-overhead")
+    # # except Exception:
+    # #     print("Failed to compile model. Continuing without compilation.")
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+
+    return model, tokenizer, sampling_params
