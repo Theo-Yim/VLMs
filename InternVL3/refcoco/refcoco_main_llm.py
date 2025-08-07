@@ -10,20 +10,17 @@ import os
 
 import torch
 from tqdm import tqdm
-
-# from InternVL3.utils.preprocess import load_image
 from InternVL3.utils.processor_main import RefCOCOProcessor
 
 
-def check_missing_a3(self, qna_list):
-    """Check for missing A2 responses in QnA list"""
-    missing_indices = []
-    
-    for i, qna in enumerate(qna_list):
-        if 'A3' not in qna or not qna['A3'] or qna['A3'].strip() == "" or len(qna['A3'].strip()) < 100:
-            missing_indices.append(i)
-    
-    return missing_indices
+# def fix_a2_string(data_entry):
+#     """Fix A2 string and store the result in A3"""
+#     anno = data_entry["annos_str"]
+#     for qna in data_entry["QnA"]:
+#         if "A3" in qna and len(qna["A3"]) > 100:
+#             continue
+#         qna["A3"] = fix_tool_calling_strings(data_entry["image_id"], qna["A2"], anno)
+#     return
 
 
 def main():
@@ -35,8 +32,8 @@ def main():
 
     Note: Run merge_refcoco_datasets.py first to create the merged dataset file.
     """
-    processor = RefCOCOProcessor(model_path="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8")
-
+    processor = RefCOCOProcessor(model_path="Qwen/Qwen3-14B-FP8")  # Qwen3-30B-A3B-Thinking-2507-FP8")
+    # output_folder = "/mnt/nas1/data/coco/refcoco_vlm_results_theo"
     output_dir = processor.output_folder.rstrip("/")+'_llm'
 
     # Find all JSON files in the output directory
@@ -60,13 +57,12 @@ def main():
         except Exception as e:
             print(f"Error loading {json_path}: {e}")
 
-        # image_path = data_entry["image_path"]
         output_path = os.path.join(output_dir, data_entry["image_id"] + ".json")
-        processor.generate_llm_responses(data_entry)
+        # fix_a2_string(data_entry)
+        processor.fix_answer_strings(data_entry)
         torch.cuda.empty_cache()
         gc.collect()
         # Save results
-        # processor.save_results(data_entry, output_path)
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data_entry, f, indent=2, ensure_ascii=False)
         # print(f"Processed {image_path}.")

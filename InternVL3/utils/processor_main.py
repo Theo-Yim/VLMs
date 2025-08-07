@@ -21,6 +21,11 @@ from pathlib import Path
 
 import torch
 
+from InternVL3.utils.toolcall_parser_n_fixer import (
+    extract_tool_calls,
+    fix_tool_calling_strings,
+    parse_annotations,
+)
 from InternVL3.utils.constants import generation_config
 from InternVL3.utils.processor_utils import load_llm_model, load_models, split_model
 
@@ -74,6 +79,17 @@ I will provide the original question and model's response. Original question inc
 
 # Response:
 {response_1}
+"""
+        self.q3_prompt_2 = """Refine the text below:
+I will provide the original question and LLM's response. The original response includes thought process to reach to the answer to the original question. Model is meant to generate response only from visuals, not descriptions. Thus, existence of object annotations should not be mentioned in the response, and they should be rephrased. Response can include <T>, </T>, <A>, </A>, {{Tool call}}, and these tags should remain as is. Response should not include noun plus # pattern, like "person 1". Therefore, noun # pattern should be replaced with noun phrase with a participial modifier. Give me the fixed version of response.
+# Original Question:
+{question}
+
+# Original Response:
+{answer}
+
+# Wrong patterns:
+{wrong_pattern_str}
 """
         return
 
@@ -269,52 +285,89 @@ I will provide the original question and model's response. Original question inc
 
         return
 
-    def generate_llm_responses(self, data_entry):
-        """Refine the responses with reasoning using QWEN3-30B-A3B"""
-        anno = data_entry["annos_str"]
+    def fix_answer_strings(self, data_entry):
         for qna in data_entry["QnA"]:
             if "A3" in qna and len(qna["A3"]) > 100:
                 continue
+            response = fix_tool_calling_strings(
+                data_entry["image_id"], qna["A2"], data_entry["annos_str"]
+            )
+            # Remove adundant think tags
+            first_think_pos = response.find("<think>")
+            last_think_pos = response.rfind("</think>")
+            response = (
+                response[: first_think_pos + len("<think>")]
+                + response[first_think_pos + len("<think>") : last_think_pos]
+                .replace("<think>", "")
+                .replace("</think>", "")
+                + response[last_think_pos:]
+            )
+            annotations = parse_annotations(data_entry["annos_str"])
+            tool_calls = extract_tool_calls(response)
+            tool_call_contents = [
+                response[start_pos:end_pos] for _, start_pos, end_pos in tool_calls
+            ]
+            text_only = re.sub(r"\{.*?\}", "{Tool call}", response)
+            wrong_pattern = [_ for _ in annotations.keys() if _ in text_only]
 
-            question = qna["Q"]
-            # Remove bbox from annotation string for this prompt
-            anno_for_prompt = re.sub(r" \[[^\]]*\]", "", anno)
-            prompt_2 = self.q2_prompt.format(anno=anno_for_prompt, question=question)
-            prompt_2 = prompt_2.strip("<image>\n")
-            prompt_3 = self.q3_prompt.format(prompt_2=prompt_2, response_1=qna["A2"])
+            if len(wrong_pattern) == 0:
+                qna["A3"] = response
+                continue
 
-            # Generate response using QWEN3-30B-A3B
+            text_only = (
+                text_only.replace("<think>", "<T>")
+                .replace("</think>", "</T>")
+                .replace("<answer>", "<A>")
+                .replace("</answer>", "</A>")
+            )
+
+            wrong_pattern_str = "\n".join(
+                [
+                    f"{_} should be replaced by rephrasing the annotations {annotations[_]}"
+                    for _ in wrong_pattern
+                ]
+            )
+            prompt = self.q3_prompt_2.format(
+                question=qna["Q"], answer=text_only, wrong_pattern_str=wrong_pattern_str
+            )
             messages = [
                 {
                     "role": "system",
                     "content": "You are a helpful assistant that refines multimodal reasoning responses.",
                 },
-                {"role": "user", "content": prompt_3},
+                {"role": "user", "content": prompt},
             ]
-            # Tokenize and generate
             prompt = self.tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
             )
             with torch.inference_mode():
                 outputs = self.model.generate(prompt, self.sampling_params)
-            qna["A3"] = outputs[0].outputs[0].text #TODO: must post-process to find answer only
-            # Below is the code using transformers.
-            # model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.model.device)
-            # with torch.no_grad():
-            #     generated_ids = self.model.generate(
-            #         **model_inputs,
-            #         max_new_tokens=2048,
-            #         do_sample=True,
-            #         temperature=0.6,
-            #         top_p=0.95,
-            #         top_k=20,
-            #         min_p=0.0,
-            #         pad_token_id=self.tokenizer.eos_token_id
-            #     )
-            # generated_ids = generated_ids[0][len(model_inputs.input_ids[0]):]
-            # response_3 = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+            res = outputs[0].outputs[0].text  # TODO: must post-process to find answer only
+            res = res[res.find("</think>") + len("</think>") :].strip()
+            res = res[:3] + "\n" + res[3:-4].strip() + "\n" + res[-4:]
+            res = (
+                res.replace("<T>", "<think>")
+                .replace("</T>", "</think>")
+                .replace("<A>", "<answer>")
+                .replace("</A>", "</answer>")
+            )
 
-            # qna["A3"] = response_3.strip()
+            for toll_call_content in tool_call_contents:
+                # replace {Tool call} with toll_call_content one by one
+                loc = res.find("{Tool call}")
+                if loc == -1:
+                    print("Error! missing {Tool call} in the response")
+                    qna["A3"] = ""
+                    break
+                res = (
+                    res[:loc].strip()
+                    + "\n"
+                    + toll_call_content
+                    + "\n"
+                    + res[loc + len("{Tool call}") :].strip()
+                )
+            res = "\n".join([_.strip(" ") for _ in res.split("\n")])
+            qna["A3"] = res
         return
 
     def save_results(self, data_entry, output_path):

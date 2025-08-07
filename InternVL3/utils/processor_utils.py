@@ -130,14 +130,19 @@ def load_models(model_path="OpenGVLab/InternVL3-78B", device_map: list = None):
 
 def load_llm_model(model_path="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8"):
     # Initialize QWEN3-30B-A3B model for LLM responses
-    print("Initializing QWEN3-30B-A3B model...")
+    print(f"Initializing {model_path}...")
 
-    # import os
+    # Suppress vLLM verbose output
+    import os
+    os.environ["VLLM_USE_TRITON"] = "0"
+    os.environ["VLLM_VERBOSE"] = "0"
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
+    
     from vllm import LLM, SamplingParams
 
     # os.environ["CUDA_VISIBLE_DEVICES"] = "2" # This is for testing.
-    # Initialize vLLM with your FP8 model
-    model = LLM(model="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8", ) # max_model_len=180000, gpu_memory_utilization=0.6
+    # TODO: must adjust it before run depending on the GPU memory
+    model = LLM(model=model_path, gpu_memory_utilization=0.4)
 
     # Configure sampling
     sampling_params = SamplingParams(
