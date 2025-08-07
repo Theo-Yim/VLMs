@@ -132,12 +132,12 @@ def load_llm_model(model_path="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8"):
     # Initialize QWEN3-30B-A3B model for LLM responses
     print("Initializing QWEN3-30B-A3B model...")
 
-    import os
+    # import os
     from vllm import LLM, SamplingParams
 
     # os.environ["CUDA_VISIBLE_DEVICES"] = "2" # This is for testing.
     # Initialize vLLM with your FP8 model
-    model = LLM(model="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8", )
+    model = LLM(model="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8", ) # max_model_len=180000, gpu_memory_utilization=0.6
 
     # Configure sampling
     sampling_params = SamplingParams(
@@ -146,7 +146,6 @@ def load_llm_model(model_path="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8"):
         top_k=20,
         min_p=0.0,
         max_tokens=32768,
-        stop=["<|im_end|>", "</think>"]
     )
 
     # model = AutoModelForCausalLM.from_pretrained(

@@ -37,24 +37,31 @@ def main():
     """
     processor = RefCOCOProcessor(model_path="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8")
 
-    # Load pre-merged datasets
-    data_list = processor.load_datasets()
+    output_dir = processor.output_folder.rstrip("/")+'_llm'
 
-    print(f"Loaded {len(data_list)} unique images with merged referring expressions")
+    # Find all JSON files in the output directory
+    json_files = []
+    for root, dirs, files in os.walk(processor.output_folder):
+        for file in files:
+            if file.endswith('.json'):
+                json_files.append(os.path.join(root, file))
+    print(f"Loaded {len(json_files)} unique images with merged referring expressions")
 
-    for data_entry in tqdm(data_list, desc="Processing images"):
+    for json_path in tqdm(json_files, desc="Processing images"):
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data_entry = json.load(f)
+            # Validate required fields
+            required_fields = ['image_path', 'image_id', 'annos_str', 'QnA']
+            for field in required_fields:
+                if field not in data_entry:
+                    print(f"Warning: Missing required field '{field}' in {json_path}")
+                    continue
+        except Exception as e:
+            print(f"Error loading {json_path}: {e}")
+
         # image_path = data_entry["image_path"]
-        output_path = os.path.join(processor.output_folder.rstrip("/")+'_llm', data_entry["image_id"] + ".json")
-        # TODO: need to check if Q3 is empty
-        # try:
-        #     pixel_values = (
-        #         load_image(os.path.join(processor.dataset_p_root, image_path), max_num=12)
-        #         .to(torch.bfloat16)
-        #         .cuda()
-        #     )
-        # except Exception as e:
-        #     print(f"Error loading {image_path}: {e}")
-        #     continue
+        output_path = os.path.join(output_dir, data_entry["image_id"] + ".json")
         processor.generate_llm_responses(data_entry)
         torch.cuda.empty_cache()
         gc.collect()

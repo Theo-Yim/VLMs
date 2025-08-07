@@ -297,7 +297,7 @@ I will provide the original question and model's response. Original question inc
             )
             with torch.inference_mode():
                 outputs = self.model.generate(prompt, self.sampling_params)
-            qna["A3"] = outputs[0].outputs[0].text
+            qna["A3"] = outputs[0].outputs[0].text #TODO: must post-process to find answer only
             # Below is the code using transformers.
             # model_inputs = self.tokenizer([prompt], return_tensors="pt").to(self.model.device)
             # with torch.no_grad():
