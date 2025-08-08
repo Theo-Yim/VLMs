@@ -10,8 +10,8 @@ import os
 
 import torch
 from tqdm import tqdm
-from InternVL3.utils.processor_main import RefCOCOProcessor
 
+from InternVL3.utils.processor_main import RefCOCOProcessor
 
 # def fix_a2_string(data_entry):
 #     """Fix A2 string and store the result in A3"""
@@ -32,24 +32,26 @@ def main():
 
     Note: Run merge_refcoco_datasets.py first to create the merged dataset file.
     """
-    processor = RefCOCOProcessor(model_path="Qwen/Qwen3-14B-FP8")  # Qwen3-30B-A3B-Thinking-2507-FP8")
+    processor = RefCOCOProcessor(
+        model_path="Qwen/Qwen3-14B-FP8",
+    )  # Qwen3-30B-A3B-Thinking-2507-FP8")
     # output_folder = "/mnt/nas1/data/coco/refcoco_vlm_results_theo"
-    output_dir = processor.output_folder.rstrip("/")+'_llm'
+    output_dir = processor.output_folder.rstrip("/") + "_llm"
 
     # Find all JSON files in the output directory
     json_files = []
     for root, dirs, files in os.walk(processor.output_folder):
         for file in files:
-            if file.endswith('.json'):
+            if file.endswith(".json"):
                 json_files.append(os.path.join(root, file))
     print(f"Loaded {len(json_files)} unique images with merged referring expressions")
 
-    for json_path in tqdm(json_files, desc="Processing images"):
+    for json_path in json_files:  # tqdm(json_files, desc="Processing images"):
         try:
-            with open(json_path, 'r', encoding='utf-8') as f:
+            with open(json_path, "r", encoding="utf-8") as f:
                 data_entry = json.load(f)
             # Validate required fields
-            required_fields = ['image_path', 'image_id', 'annos_str', 'QnA']
+            required_fields = ["image_path", "image_id", "annos_str", "QnA"]
             for field in required_fields:
                 if field not in data_entry:
                     print(f"Warning: Missing required field '{field}' in {json_path}")

@@ -21,13 +21,13 @@ from pathlib import Path
 
 import torch
 
+from InternVL3.utils.constants import generation_config
+from InternVL3.utils.processor_utils import load_llm_model, load_models, split_model
 from InternVL3.utils.toolcall_parser_n_fixer import (
     extract_tool_calls,
     fix_tool_calling_strings,
     parse_annotations,
 )
-from InternVL3.utils.constants import generation_config
-from InternVL3.utils.processor_utils import load_llm_model, load_models, split_model
 
 
 class RefCOCOProcessor:
@@ -91,6 +91,15 @@ I will provide the original question and LLM's response. The original response i
 # Wrong patterns:
 {wrong_pattern_str}
 """
+        self.q3_prompt_similarity = """Given a set of descriptions and query sentence, tell me if the subject of query sentence is the same subject of set of descriptions. All descriptions are about the same target but from different angles. Query can possibly be another rephrased noun phrase.
+Only answer yes or no.
+Query: {query}
+Descriptions: {annotation}
+"""  # This will be used later to double check if the noun phrase belongs to the annotation. We will use Qwen3-4B-4bit
+        self.q3_prompt_similarity_2 = """Given a set of descriptions and query sentence, tell me if the subject of query sentence is the same as one of the descriptions provided. All sentences in a description are about the same target but from different angles. Query can possibly be another rephrased noun phrase.
+Only answer description number or "None of them".
+Query: {query}
+"""  # Add Description1: {annos}, Description2: {annos}, etc.
         return
 
     def load_datasets(self, merged_data_file="merged_refcoco_data.pkl"):
@@ -285,10 +294,35 @@ I will provide the original question and LLM's response. The original response i
 
         return
 
+    def verify_answer_strings(self, data_entry):
+        for qna in data_entry["QnA"]:
+            response = fix_tool_calling_strings(
+                data_entry["image_id"], qna["A3"], data_entry["annos_str"]
+            )
+            if response != qna["A3"]:
+                print(f"Error! {data_entry['image_id']}:\nA3: {qna['A3']}\nResponse: {response}")
+                qna["A3"] = response
+
+            annotations = parse_annotations(data_entry["annos_str"])
+            text_only = re.sub(r"\{.*?\}", "{Tool call}", response)
+            wrong_pattern = [_ for _ in annotations.keys() if _ in text_only]
+            if len(wrong_pattern) != 0:
+                print(f"Error! {data_entry['image_id']} - Wrong pattern in A3\nA3: {response}")
+                qna["A3"] = ""
+
+        return
+
     def fix_answer_strings(self, data_entry):
+        print_switch = False
         for qna in data_entry["QnA"]:
             if "A3" in qna and len(qna["A3"]) > 100:
                 continue
+            if not print_switch:
+                print(f"\n===== Processing: {data_entry['image_id']} =====")
+                print_switch = True
+            if re.search(r"<(Crop .*?)>", qna["A2"]):
+                print("  Found <Crop ...> pattern in A2! Now replacing it with {Crop ...}")
+                qna["A2"] = re.sub(r"<(Crop .*?)>", r"{\1}", qna["A2"])
             response = fix_tool_calling_strings(
                 data_entry["image_id"], qna["A2"], data_entry["annos_str"]
             )
@@ -345,6 +379,7 @@ I will provide the original question and LLM's response. The original response i
             res = outputs[0].outputs[0].text  # TODO: must post-process to find answer only
             res = res[res.find("</think>") + len("</think>") :].strip()
             res = res[:3] + "\n" + res[3:-4].strip() + "\n" + res[-4:]
+            res = res[res.find("<T>") :]
             res = (
                 res.replace("<T>", "<think>")
                 .replace("</T>", "</think>")
@@ -356,7 +391,7 @@ I will provide the original question and LLM's response. The original response i
                 # replace {Tool call} with toll_call_content one by one
                 loc = res.find("{Tool call}")
                 if loc == -1:
-                    print("Error! missing {Tool call} in the response")
+                    print("  Error! missing {Tool call} in the response")
                     qna["A3"] = ""
                     break
                 res = (
@@ -368,6 +403,7 @@ I will provide the original question and LLM's response. The original response i
                 )
             res = "\n".join([_.strip(" ") for _ in res.split("\n")])
             qna["A3"] = res
+        self.verify_answer_strings(data_entry)
         return
 
     def save_results(self, data_entry, output_path):

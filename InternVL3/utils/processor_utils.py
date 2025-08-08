@@ -25,9 +25,9 @@ def split_model(model_path):
         num_layers_per_gpu[world_size - 1] -= world_size - 1
         for i in range(1, world_size):
             num_layers_per_gpu[i] += 2
-    elif world_size == 2:
-        num_layers_per_gpu[0] += 5
-        num_layers_per_gpu[1] -= 5
+    else:
+        num_layers_per_gpu[world_size - 2] += 5
+        num_layers_per_gpu[world_size - 1] -= 5
 
     assert num_layers == sum(num_layers_per_gpu), (
         f"Total layers {num_layers} does not match split {sum(num_layers_per_gpu)}"
@@ -48,35 +48,6 @@ def split_model(model_path):
     device_map["language_model.model.norm"] = world_size - 1  # world_size-1 or "cpu"
     device_map["language_model.lm_head"] = world_size - 1  # world_size-1 or "cpu"
     return device_map
-
-
-# def split_model_for_group(model_path, gpu_group: list):
-#     """Create device map for a specific group of 4 GPUs"""
-#     device_map = {}
-#     world_size = len(gpu_group)
-#     config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
-#     num_layers = config.llm_config.num_hidden_layers
-#     # Since the first GPU will be used for ViT, treat it as half a GPU.
-#     num_layers_per_gpu = math.ceil(num_layers / (world_size - 0.5))
-#     num_layers_per_gpu = [num_layers_per_gpu] * world_size
-#     num_layers_per_gpu[0] = math.ceil(num_layers_per_gpu[0] * 0.5)
-#     layer_cnt = 0
-#     for i, num_layer in enumerate(num_layers_per_gpu):
-#         gpu_id = gpu_group[i]
-#         for _ in range(num_layer):
-#             device_map[f"language_model.model.layers.{layer_cnt}"] = gpu_id
-#             layer_cnt += 1
-#     first_gpu = gpu_group[0]
-#     device_map["vision_model"] = first_gpu
-#     device_map["mlp1"] = first_gpu
-#     device_map["language_model.model.tok_embeddings"] = first_gpu
-#     device_map["language_model.model.embed_tokens"] = first_gpu
-#     device_map["language_model.output"] = first_gpu
-#     device_map["language_model.model.norm"] = first_gpu
-#     device_map["language_model.model.rotary_emb"] = first_gpu
-#     device_map["language_model.lm_head"] = first_gpu
-
-#     return device_map
 
 
 def load_models(model_path="OpenGVLab/InternVL3-78B", device_map: list = None):
@@ -121,9 +92,7 @@ def load_models(model_path="OpenGVLab/InternVL3-78B", device_map: list = None):
     except Exception:
         print("Failed to compile model. Continuing without compilation.")
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_path, trust_remote_code=True, use_fast=False
-    )
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
     return model, tokenizer
 
@@ -132,17 +101,13 @@ def load_llm_model(model_path="Qwen/Qwen3-30B-A3B-Thinking-2507-FP8"):
     # Initialize QWEN3-30B-A3B model for LLM responses
     print(f"Initializing {model_path}...")
 
-    # Suppress vLLM verbose output
-    import os
-    os.environ["VLLM_USE_TRITON"] = "0"
-    os.environ["VLLM_VERBOSE"] = "0"
-    os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
-    
     from vllm import LLM, SamplingParams
 
     # os.environ["CUDA_VISIBLE_DEVICES"] = "2" # This is for testing.
     # TODO: must adjust it before run depending on the GPU memory
-    model = LLM(model=model_path, gpu_memory_utilization=0.4)
+    model = LLM(model=model_path, trust_remote_code=True, max_model_len=19480)
+    # , gpu_memory_utilization=0.4)
+    # max_model_len=20480 takes around 24GB GPU memory
 
     # Configure sampling
     sampling_params = SamplingParams(

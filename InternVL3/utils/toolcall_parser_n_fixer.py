@@ -41,15 +41,16 @@ def similarity_score(text1: str, text2: str) -> float:
 
 
 def find_best_match(
-    target_text: str, annotations: Dict[str, List[str]], threshold: float = 0.3
+    target_text: str, annotations: Dict[str, List[str]], threshold: float = 0.5
 ) -> Optional[str]:
     """
     Find the best matching noun+number for a given target text.
+    Only returns a match if there's high confidence (threshold=0.5).
 
     Args:
         target_text: The text to match against descriptions
         annotations: Dict of noun+number to descriptions
-        threshold: Minimum similarity threshold
+        threshold: Minimum similarity threshold (conservative: 0.5)
 
     Returns:
         Best matching noun+number or None if no good match found
@@ -64,7 +65,11 @@ def find_best_match(
                 best_score = score
                 best_match = noun_number
 
-    return best_match
+    # Additional conservative check: only return match if score is significantly high
+    if best_match and best_score > threshold:
+        return best_match
+
+    return None
 
 
 def extract_tool_calls(text: str) -> List[Tuple[str, int, int]]:
@@ -121,6 +126,7 @@ def fix_tool_calling_content(content: str, annotations: Dict[str, List[str]]) ->
     # Split by comma to handle multiple entities
     parts = [part.strip() for part in content.split(",")]
     fixed_parts = []
+    not_found_parts = []
 
     for part in parts:
         # Check if it already follows correct format
@@ -137,13 +143,14 @@ def fix_tool_calling_content(content: str, annotations: Dict[str, List[str]]) ->
             fixed_parts.append(best_match)
         else:
             # If no match found, keep original but log warning
-            print(f"  Warning: Could not find match for '{part}'")
+            # print(f"  Warning: Could not find match for '{part}'")
             fixed_parts.append(part)
+            not_found_parts.append(part)
 
-    return crop_prefix + ", ".join(fixed_parts)
+    return crop_prefix + ", ".join(fixed_parts), ", ".join(not_found_parts)
 
 
-def fix_tool_calling_strings(image_id: str, qna_a2: str, anno_str: str) -> str:
+def fix_tool_calling_strings(image_id: str, qna_a: str, anno_str: str) -> str:
     """
     Main function to fix tool-calling strings in qna["A2"].
 
@@ -154,212 +161,102 @@ def fix_tool_calling_strings(image_id: str, qna_a2: str, anno_str: str) -> str:
     Returns:
         Fixed A2 string
     """
+    # print(f"Processing: {image_id}")
     # Parse annotations
     annotations = parse_annotations(anno_str)
     # Extract all tool-calling patterns
-    tool_calls = extract_tool_calls(qna_a2)
+    tool_calls = extract_tool_calls(qna_a)
     # Process tool calls in reverse order to maintain string positions
-    fixed_text = qna_a2
+    fixed_text = qna_a
     for content, start_pos, end_pos in reversed(tool_calls):
         # Check if it needs fixing
         valid_nouns = set(annotations.keys())
         if not is_valid_crop_format(content, valid_nouns):
-            print(f"Processing: {image_id}")
             print(f"  Needs fixing: {content}")
-            fixed_content = fix_tool_calling_content(content, annotations)
-            print(f"  Fixed to: {fixed_content}")
+            fixed_content, not_found = fix_tool_calling_content(content, annotations)
+            if fixed_content != content:
+                print(f"  Fixed to: {fixed_content}")
+            else:
+                print(f"  Could not fix: {content}, not_found_parts: {not_found}")
 
             # Replace in the text
             fixed_text = fixed_text[: start_pos + 1] + fixed_content + fixed_text[end_pos - 1 :]
     return fixed_text
 
 
-# def fix_text_strings(image_id: str, question:str, answer: str, anno_str: str) -> str:
-#     # Parse annotations
-#     annotations = parse_annotations(anno_str)
-#     # anno_str_2 = anno_str[2:].split('- ')
-#     # anno_str_2 = [re.sub(r" \[[^\]]*\]", "", _.strip()) for _ in anno_str_2]
-#     # anno_str_2 = re.sub(r" \[[^\]]*\]", "", anno_str)
-#     # Extract all tool-calling patterns
-#     tool_calls = extract_tool_calls(answer)
-#     tool_call_contents = [answer[start_pos:end_pos] for _, start_pos, end_pos in tool_calls]
-#     text_only = re.sub(r'\{.*?\}', "{Tool call}", answer)
-#     wrong_pattern = [_ for _ in annotations.keys() if _ in text_only]
-
-#     wrong_pattern_str = "\n".join([f"{_} should be fixed by rephrasing the annotations {annotations[_]}" for _ in wrong_pattern])
-
-#     prompt = """Refine the text below:
-# I will provide the original question and LLM's response. The original response includes thought process to reach to the answer to the original question. Model is meant to generate response only from visuals, not descriptions. Thus, existence of object annotations should not be mentioned in the response, and they should be rephrased. Response can include {{Tool call}} and this tool call inside braces should be remained as is. Response should not include noun plus number pattern. Therefore, noun + number pattern should be fixed. Give me the fixed version of response.
-# # Original Question:
-# {question}
-
-# # Original Response:
-# {answer}
-
-# # Wrong patterns:
-# {wrong_pattern_str}
-# """
-#     prompt = prompt.format(question=question, answer=answer, wrong_pattern_str=wrong_pattern_str)
-    
-#     messages = [
-#         {
-#             "role": "system",
-#             "content": "You are a helpful assistant that refines multimodal reasoning responses.",
-#         },
-#         {"role": "user", "content": prompt},
-#     ]
-#     # Tokenize and generate
-#     prompt = self.tokenizer.apply_chat_template(
-#         messages, tokenize=False, add_generation_prompt=True
-#     )
-#     with torch.inference_mode():
-#         outputs = self.model.generate(prompt, self.sampling_params)
-
-
 # Example usage and test
 def test_function():
-    """Test the function with the provided example."""
+    """Test the function with the provided examples."""
 
     # Example data
-    anno_str = """- person 1 [170.75, 91.57, 425.55, 428.55], who is "a woman standing behind the net", "middle standing up", "standing with racket", "a lady standing up", "person standing u"
+    anno_str_1 = """- person 1 [170.75, 91.57, 425.55, 428.55], who is "a woman standing behind the net", "middle standing up", "standing with racket", "a lady standing up", "person standing u"
 - person 2 [114.57, 237.84, 435.4, 655.33], who is "dark - haired woman sitting with leg extended and tennis racquet on lap", "the woman sitting down on the right", "woman sitting with leg extended", "right girl on floor", "ditting darker hair\""""
 
-    qna_a2 = """<think>
-{Crop dark - haired woman sitting with leg extended and tennis racquet on lap}
+    qna_a2_1 = """<think>
+{Crop woman sitting with tennis racquet on her leg}
 
-The woman sitting with a tennis racket on her lap is smiling, which suggests a sense of contentment or enjoyment. The tennis setting indicates they might be playing or about to play tennis, an activity that often brings happiness. Her relaxed posture and the context of a casual game could contribute to her smile, showing she's having a good time.
+The woman sitting with a tennis racket on her lap is smiling.
 </think>
 
 <answer>
-The woman sitting with a tennis racket on her lap might be smiling because she is enjoying the moment, possibly before or after a game of tennis. The relaxed setting and the company of friends likely contribute to her happiness.
+The woman might be smiling because she's enjoying the moment.
 </answer>"""
 
+    print("=== TEST 1: Original Example ===")
     print("Original A2:")
-    print(qna_a2)
-    print("\n" + "=" * 50 + "\n")
+    print(qna_a2_1)
+    print("\n" + "-" * 50 + "\n")
 
-    # Fix the tool-calling strings
-    fixed_a2 = fix_tool_calling_strings(qna_a2, anno_str)
+    fixed_a2_1 = fix_tool_calling_strings("dummy_id", qna_a2_1, anno_str_1)
 
     print("Fixed A2:")
-    print(fixed_a2)
+    print(fixed_a2_1)
 
-    return fixed_a2
-    """
-    JavaScript implementation of the tool-calling string fixer.
-    This version handles all edge cases more efficiently.
-    """
-    js_code = """
-    function parseAnnotations(annoStr) {
-        const annotations = {};
-        const lines = annoStr.trim().split('\\n');
-        
-        for (const line of lines) {
-            if (!line.trim() || !line.startsWith('-')) continue;
-            
-            const match = line.match(/-\\s*(\\w+\\s+\\d+)/);
-            if (!match) continue;
-            
-            const nounNumber = match[1];
-            const descriptions = [...line.matchAll(/"([^"]+)"/g)].map(m => m[1]);
-            annotations[nounNumber] = descriptions;
-        }
-        
-        return annotations;
-    }
+    # User's new example - should be more conservative
+    anno_str_2 = """- person 1 [103.93, 299.99, 342.08000000000004, 777.4], who is "the back of an older woman with her hair in a barrette with a blue jacket on", "a woman is wearing blue sweater", "the lady with the blue shirt", "woman back in blue", "lady with back to us"
+- person 2 [216.58, 261.7, 514.8000000000001, 735.29], who is "the woman in the grey shirt with a watch on her wrist ..", "woman in gray shirt facing camera on right", "woman with gray shirt standing next to man", "a short haired woman in jeans shopping", "gray shirt wearing glasses"
+- person 3 [83.6, 270.27, 252.24999999999997, 723.5999999999999], who is "a woman in glasses shops in an open air fruit market", "a woman in a gray coat and scarf"
+"""
 
-    function similarityScore(text1, text2) {
-        const words1 = text1.toLowerCase().split(/\\s+/);
-        const words2 = text2.toLowerCase().split(/\\s+/);
-        
-        const set1 = new Set(words1);
-        const set2 = new Set(words2);
-        
-        const intersection = new Set([...set1].filter(x => set2.has(x)));
-        const union = new Set([...set1, ...set2]);
-        
-        return intersection.size / union.size;
-    }
+    qna_a2_2 = """<think>
+To determine the type of market the person in the gray coat and scarf is shopping at, I will examine the items visible in the image. The market appears to have various fruits and vegetables, as well as other goods such as baskets and birds in cages. I will zoom in on the fruit and vegetable section to confirm the types of produce available.
 
-    function findBestMatch(targetText, annotations, threshold = 0.3) {
-        let bestMatch = null;
-        let bestScore = threshold;
-        
-        for (const [nounNumber, descriptions] of Object.entries(annotations)) {
-            for (const desc of descriptions) {
-                const score = similarityScore(targetText, desc);
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMatch = nounNumber;
-                }
-            }
-        }
-        
-        return bestMatch;
-    }
+{Crop person 3, bananas in front}
 
-    function fixToolCallingStrings(qnaA2, annoStr) {
-        const annotations = parseAnnotations(annoStr);
-        
-        const pattern = /\\{([^}]+)\\}/g;
-        const matches = [];
-        let match;
-        
-        while ((match = pattern.exec(qnaA2)) !== null) {
-            matches.push({
-                content: match[1].trim(),
-                startPos: match.index,
-                endPos: match.index + match[0].length
-            });
-        }
-        
-        let fixedText = qnaA2;
-        
-        for (let i = matches.length - 1; i >= 0; i--) {
-            const toolCall = matches[i];
-            
-            let content = toolCall.content;
-            if (content.toLowerCase().startsWith('crop')) {
-                content = content.slice(4).trim();
-            }
-            
-            const parts = content.split(',').map(part => part.trim());
-            const fixedParts = [];
-            let needsFix = false;
-            
-            for (const part of parts) {
-                const nounNumberMatch = part.match(/^(\\w+)\\s+(\\d+)$/);
-                if (nounNumberMatch && annotations[`${nounNumberMatch[1]} ${nounNumberMatch[2]}`]) {
-                    fixedParts.push(part);
-                } else {
-                    const bestMatch = findBestMatch(part, annotations);
-                    if (bestMatch) {
-                        fixedParts.push(bestMatch);
-                        needsFix = true;
-                    } else {
-                        fixedParts.push(part);
-                        needsFix = true;
-                    }
-                }
-            }
-            
-            if (needsFix) {
-                const fixedContent = `Crop ${fixedParts.join(', ')}`;
-                fixedText = fixedText.substring(0, toolCall.startPos) + 
-                           `{${fixedContent}}` + 
-                           fixedText.substring(toolCall.endPos);
-            }
-        }
-        
-        return fixedText;
-    }
-    
-    return fixToolCallingStrings(arguments[0], arguments[1]);
-    """
+Upon closer inspection, there are bananas, oranges, and other fruits prominently displayed, along with a variety of vegetables like cabbages. This suggests a fresh produce market. Additionally, the presence of baskets and birds indicates that this is a general open-air market where various items are sold.
 
-    # In a real implementation, you would execute this JavaScript code
-    # For now, use the Python implementation
-    return fix_tool_calling_strings(qna_a2, anno_str)
+Therefore, the person in the gray coat and scarf is shopping at a fresh produce market.
+</think>
+
+<answer>
+The person in the gray coat and scarf is shopping at a fresh produce market.
+</answer>"""
+
+    print("\n\n=== TEST 2: Conservative Approach (User's Example) ===")
+    print("Original A2:")
+    print(qna_a2_2)
+    print("\n" + "-" * 50 + "\n")
+
+    fixed_a2_2 = fix_tool_calling_strings("dummy_id", qna_a2_2, anno_str_2)
+
+    print("Fixed A2:")
+    print(fixed_a2_2)
+
+    anno_str_3 = '- person 1 [187.13, 85.22, 530.01, 367.18000000000006], who is "man in front of lamp", "one right of lamp", "far left man", "striped shirt"\n- person 2 [309.9, 143.67, 879.27, 497.29999999999995], who is "person with legs crossed on right", "blue pants man black shirt", "old guy black shirt", "man in black shirt", "laid back man"\n- person 3 [461.44, 178.32, 1085.95, 586.3199999999999], who is "woman in gray with white sleeves", "person on far right", "girl on far right", "child far right", "ponytail girl"\n- person 4 [20.6, 128.36, 167.59, 429.70000000000005], who is "woman siting by herself", "old lady in the chare", "woman in dark shirt", "old lady by herself", "left person"\n- chair 1 [13.17, 139.77, 181.40999999999997, 482.87], which is "a tan sofa chair"'
+
+    qna_a2_3 = "<think>\nFirst, I need to identify the setting where the people in the image are located. I'll start by looking at the background elements and furniture to get a sense of the environment.\n\n{Crop person 1, tan sofa chair}\n\nFrom the cropped image, I can see that person 1 is sitting on a tan sofa chair. The presence of the sofa chair suggests that this is an indoor setting, likely a living room.\n\nNext, I'll examine other details in the room to confirm the setting.\n\n{Crop desk 1, flower arrangement}\n\nThe desk has a flower arrangement, wine glasses, newspapers, and other casual items. This reinforces the idea of a relaxed, domestic environment.\n\nFinally, looking at the overall layout with other furniture and decorations such as the lamp, windows, and other seating arrangements:\n\n{Crop lamp, windows, other seating}\n\nThe combination of the lamp, windows, and additional seating, along with the casual arrangement of people, strongly indicates that this is a living room setting.\n\n</think>\n<answer>\nThe setting where the person is located is a living room.\n</answer>"
+
+    print("\n\n=== TEST 3: ===")
+    print("Original A2:")
+    print(qna_a2_3)
+    print("\n" + "-" * 50 + "\n")
+
+    fixed_a2_3 = fix_tool_calling_strings("dummy_id", qna_a2_3, anno_str_3)
+
+    print("Fixed A2:")
+    print(fixed_a2_3)
+
+    return fixed_a2_1, fixed_a2_3
 
 
 # Advanced version with LLM assistance for better matching
@@ -436,7 +333,7 @@ if __name__ == "__main__":
 
     print("Multi-entity test:")
     print("Original:", test_multi.strip())
-    fixed_multi = fix_tool_calling_strings(test_multi, anno_str)
+    fixed_multi = fix_tool_calling_strings("dummy_id", test_multi, anno_str)
     print("Fixed:", fixed_multi.strip())
 
     # Test non-existent entity
@@ -446,7 +343,7 @@ if __name__ == "__main__":
 
     print("\nNon-existent entity test:")
     print("Original:", test_nonexistent.strip())
-    fixed_nonexistent = fix_tool_calling_strings(test_nonexistent, anno_str)
+    fixed_nonexistent = fix_tool_calling_strings("dummy_id", test_nonexistent, anno_str)
     print("Fixed:", fixed_nonexistent.strip())
 
     # Get statistics
