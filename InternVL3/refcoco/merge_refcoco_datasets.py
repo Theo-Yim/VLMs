@@ -164,7 +164,7 @@ class RefCOCODatasetMerger:
                     category_id = sample.get("category_id")
                     category = COCO_CATEGORIES.get(category_id, "object")
 
-                    bbox = xywh_to_xyxy(sample["bbox"])
+                    bbox = sample["bbox"]  # xywh_to_xyxy(sample["bbox"])
                     descriptions = (
                         sample["captions"]
                         if isinstance(sample["captions"], list)

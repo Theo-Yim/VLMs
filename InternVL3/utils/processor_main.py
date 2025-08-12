@@ -25,7 +25,10 @@ from InternVL3.utils.constants import generation_config
 from InternVL3.utils.processor_utils import load_llm_model, load_models, split_model
 from InternVL3.utils.toolcall_parser_n_fixer import (
     extract_tool_calls,
+    fix_double_conversion,
     fix_tool_calling_strings,
+    fix_tool_calling_strings_verification,
+    load_coco_annotations,
     parse_annotations,
 )
 
@@ -81,7 +84,7 @@ I will provide the original question and model's response. Original question inc
 {response_1}
 """
         self.q3_prompt_2 = """Refine the text below:
-I will provide the original question and LLM's response. The original response includes thought process to reach to the answer to the original question. Model is meant to generate response only from visuals, not descriptions. Thus, existence of object annotations should not be mentioned in the response, and they should be rephrased. Response can include <T>, </T>, <A>, </A>, {{Tool call}}, and these tags should remain as is. Response should not include noun plus # pattern, like "person 1". Therefore, noun # pattern should be replaced with noun phrase with a participial modifier. Give me the fixed version of response.
+I will provide the original question and LLM's response. The original response includes thought process to reach to the answer to the original question. Model is meant to generate response only from visuals, not descriptions. Thus, existence of object annotations should not be mentioned in the response, and they should be rephrased. Response can include <T>, </T>, <A>, </A>, {{Tool call}}, and these tags and {{Tool call}} should remain as is. Response should not include noun plus # pattern, like "person 1". Therefore, noun # pattern should be replaced with noun phrase with a participial modifier. Sometimes, the response mentions using crop tool, {{Tool call}}, without calling {{Tool call}}. If it is the case, remove or rephrase mentioning of crop tool. Give me the fixed and natural and logical version of response.
 # Original Question:
 {question}
 
@@ -296,12 +299,12 @@ Query: {query}
 
     def verify_answer_strings(self, data_entry):
         for qna in data_entry["QnA"]:
-            response = fix_tool_calling_strings(
+            response = fix_tool_calling_strings_verification(
                 data_entry["image_id"], qna["A3"], data_entry["annos_str"]
             )
             if response != qna["A3"]:
                 print(f"Error! {data_entry['image_id']}:\nA3: {qna['A3']}\nResponse: {response}")
-                qna["A3"] = response
+            #     # qna["A3"] = response
 
             annotations = parse_annotations(data_entry["annos_str"])
             text_only = re.sub(r"\{.*?\}", "{Tool call}", response)
@@ -312,20 +315,33 @@ Query: {query}
 
         return
 
+    def fix_double_conversion(self, data_entry):
+        data_entry["annos_str"] = fix_double_conversion(
+            data_entry["annos_str"], load_coco_annotations(data_entry["image_id"])
+        )
+        return data_entry
+
     def fix_answer_strings(self, data_entry):
         print_switch = False
+        num_fixed = 0
+        num_not_found = 0
+        num_wrong_pattern = 0
+        num_removed = 0
         for qna in data_entry["QnA"]:
-            if "A3" in qna and len(qna["A3"]) > 100:
-                continue
+            # if "A3" in qna and len(qna["A3"]) > 100:
+            #     continue
             if not print_switch:
                 print(f"\n===== Processing: {data_entry['image_id']} =====")
                 print_switch = True
             if re.search(r"<(Crop .*?)>", qna["A2"]):
                 print("  Found <Crop ...> pattern in A2! Now replacing it with {Crop ...}")
                 qna["A2"] = re.sub(r"<(Crop .*?)>", r"{\1}", qna["A2"])
-            response = fix_tool_calling_strings(
+            response, total_fixed, total_not_found, total_removed = fix_tool_calling_strings(
                 data_entry["image_id"], qna["A2"], data_entry["annos_str"]
             )
+            num_fixed += total_fixed
+            num_not_found += total_not_found
+            num_removed += total_removed
             # Remove adundant think tags
             first_think_pos = response.find("<think>")
             last_think_pos = response.rfind("</think>")
@@ -347,6 +363,7 @@ Query: {query}
             if len(wrong_pattern) == 0:
                 qna["A3"] = response
                 continue
+            num_wrong_pattern += len(wrong_pattern)
 
             text_only = (
                 text_only.replace("<think>", "<T>")
@@ -376,10 +393,10 @@ Query: {query}
             )
             with torch.inference_mode():
                 outputs = self.model.generate(prompt, self.sampling_params)
-            res = outputs[0].outputs[0].text  # TODO: must post-process to find answer only
-            res = res[res.find("</think>") + len("</think>") :].strip()
+            res = outputs[0].outputs[0].text
+            res = res[res.find("</think>") + len("</think>") :].strip()  # Remove thinking process
             res = res[:3] + "\n" + res[3:-4].strip() + "\n" + res[-4:]
-            res = res[res.find("<T>") :]
+            res = res[res.find("<T>") : res.find("</A>") + len("</A>")]
             res = (
                 res.replace("<T>", "<think>")
                 .replace("</T>", "</think>")
@@ -403,8 +420,20 @@ Query: {query}
                 )
             res = "\n".join([_.strip(" ") for _ in res.split("\n")])
             qna["A3"] = res
+
+            # Temporary duplicate tool call content check
+            tool_calls = dict()
+            for tool_call_content in tool_call_contents:
+                if tool_call_content in tool_calls:
+                    print(
+                        f"Error! {data_entry['image_id']} - Duplicate tool call content: {tool_call_content}"
+                    )
+                    qna["A3"] = ""
+                    break
+                tool_calls[tool_call_content] = True
+
         self.verify_answer_strings(data_entry)
-        return
+        return num_fixed, num_not_found, num_wrong_pattern, num_removed
 
     def save_results(self, data_entry, output_path):
         """Save results with merge statistics"""

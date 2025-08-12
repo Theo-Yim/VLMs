@@ -45,6 +45,11 @@ def main():
             if file.endswith(".json"):
                 json_files.append(os.path.join(root, file))
     print(f"Loaded {len(json_files)} unique images with merged referring expressions")
+    total_num_fixed = 0
+    total_num_not_found = 0
+    total_num_wrong_pattern = 0
+    total_num_fixed_json = 0
+    total_num_removed = 0
 
     for json_path in json_files:  # tqdm(json_files, desc="Processing images"):
         try:
@@ -59,15 +64,32 @@ def main():
         except Exception as e:
             print(f"Error loading {json_path}: {e}")
 
+        # if data_entry["image_id"] != "000000581857":
+        #     continue
+
         output_path = os.path.join(output_dir, data_entry["image_id"] + ".json")
         # fix_a2_string(data_entry)
-        processor.fix_answer_strings(data_entry)
+        data_entry = processor.fix_double_conversion(data_entry)
+        num_fixed, num_not_found, num_wrong_pattern, num_removed = processor.fix_answer_strings(
+            data_entry
+        )
+        total_num_fixed += num_fixed
+        total_num_not_found += num_not_found
+        total_num_wrong_pattern += num_wrong_pattern
+        total_num_removed += num_removed
+        if num_fixed > 0 or num_wrong_pattern > 0:
+            total_num_fixed_json += 1
+        # print(f"num_fixed: {num_fixed}, num_not_found: {num_not_found}, num_wrong_pattern: {num_wrong_pattern}")
         torch.cuda.empty_cache()
         gc.collect()
         # Save results
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data_entry, f, indent=2, ensure_ascii=False)
         # print(f"Processed {image_path}.")
+
+    print(
+        f"\n=====\n\ntotal_num_fixed: {total_num_fixed}, total_num_not_found: {total_num_not_found}, total_num_wrong_pattern: {total_num_wrong_pattern}, total_num_fixed_json: {total_num_fixed_json}, total_num_removed: {total_num_removed}"
+    )
 
 
 if __name__ == "__main__":
