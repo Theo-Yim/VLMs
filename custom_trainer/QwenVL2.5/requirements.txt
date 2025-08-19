@@ -1,0 +1,30 @@
+# Core dependencies
+torch>=2.1.0
+transformers>=4.37.0
+accelerate>=0.25.0
+peft>=0.7.0
+trl>=0.7.0
+datasets>=2.14.0
+
+# Vision and image processing
+Pillow>=10.0.0
+torchvision>=0.22.1
+
+# Training utilities
+wandb>=0.15.0
+tensorboard>=2.14.0
+scikit-learn>=1.3.0
+numpy>=1.24.0
+
+# Data processing
+jsonlines>=3.1.0
+pandas>=2.0.0
+
+# Optional but recommended
+flash-attn>=2.3.0  # For flash attention support
+bitsandbytes>=0.41.0  # For quantization support
+
+# Development tools
+black>=23.0.0
+isort>=5.12.0
+pytest>=7.4.0
