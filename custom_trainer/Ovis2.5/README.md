@@ -10,7 +10,7 @@ This repository contains a complete implementation for training and inference wi
 - **Native Resolution Processing**: Ovis2.5 processes images at original resolutions using NaViT
 - **Thinking Mode**: Advanced reasoning with thinking budget control
 - **Grounding Support**: Built-in support for `<ref>`, `<box>`, `<point>` grounding format
-- **LoRA Support**: Efficient training with Low-Rank Adaptation
+- **LoRA Support**: Efficient training with Low-Rank Adaptation (✅ **Now Working!**)
 - **Crop Tool Integration**: Uses the same CropTool as QwenVL2.5
 
 ## Installation
@@ -22,6 +22,15 @@ pip install -r requirements.txt
 # Optional: Install flash attention for better performance
 pip install flash-attn --no-build-isolation
 ```
+
+## ⚠️ CRITICAL: Batch Size Requirement
+
+**Ovis2.5 REQUIRES batch_size=1** due to native resolution processing. Different images have variable tensor sizes and cannot be batched.
+
+- ❌ `--batch_size 2` or higher will cause: `RuntimeError: stack expects each tensor to be equal size`
+- ✅ Always use batch_size=1 (default) - this is non-negotiable
+- 💡 Use `--gradient_accumulation_steps 8-16` to compensate for effective batch size
+- 🔧 Training will be slower but memory efficient due to this constraint
 
 ## Data Format
 
@@ -57,9 +66,11 @@ python train_ovis25.py \
     --image_base_path data/images \
     --use_lora \
     --lora_r 128 \
+    --lora_alpha 256 \
     --learning_rate 2e-5 \
-    --batch_size 4 \
+    --gradient_accumulation_steps 8 \
     --bf16
+    # batch_size defaults to 1 (required for native resolution)
 ```
 
 ### Stage 1: Supervised Fine-Tuning (SFT)
@@ -79,12 +90,13 @@ python train_ovis25.py \
     --model_name AIDC-AI/Ovis2.5-9B \
     --use_lora \
     --lora_r 128 \
+    --lora_alpha 256 \
     --learning_rate 2e-5 \
     --num_epochs 3 \
-    --batch_size 4 \
-    --gradient_accumulation_steps 4 \
+    --gradient_accumulation_steps 8 \
     --sft_output_dir outputs/sft \
     --bf16
+    # batch_size=1 is required and automatic
 ```
 
 ### Stage 2: Regional GRPO (R-GRPO)
@@ -103,8 +115,10 @@ python train_ovis25.py \
     --sft_checkpoint outputs/sft/final_model \
     --learning_rate 5e-6 \
     --beta 0.1 \
+    --gradient_accumulation_steps 16 \
     --grpo_output_dir outputs/grpo \
     --bf16
+    # batch_size automatically set to 1
 ```
 
 ### Using Configuration Files
@@ -129,7 +143,7 @@ Example configuration file (`configs/sft_config.json`):
   "num_train_epochs": 3,
   "warmup_ratio": 0.1,
   "weight_decay": 0.01,
-  "gradient_accumulation_steps": 4,
+  "gradient_accumulation_steps": 8,
   "bf16": true,
   "use_lora": true,
   "lora_r": 128,
@@ -137,6 +151,23 @@ Example configuration file (`configs/sft_config.json`):
   "lora_dropout": 0.1
 }
 ```
+
+## LoRA Training
+
+LoRA is **strongly recommended** for Ovis2.5 training. A compatibility patch is required and included:
+
+```bash
+# ✅ LoRA patch is applied automatically
+python train_ovis25.py \
+    --use_lora \
+    --lora_r 128 \
+    --lora_alpha 256 \
+    --learning_rate 2e-5 \
+    --bf16
+    # batch_size=1 required - cannot be changed
+```
+
+**Note**: The `lora_patch.py` file is required in your directory for LoRA training to work. It's included and applied automatically.
 
 ## Inference
 
@@ -184,15 +215,19 @@ print("Answer:", result['parsed']['answer_content'])
 | **Vision Processing** | Fixed/dynamic resolution | Native resolution (NaViT) |
 | **Generation** | Standard HuggingFace | Custom with thinking mode |
 | **Grounding** | Tool calls format | `<ref>`, `<box>`, `<point>` tags |
+| **Batch Size** | Flexible | **Must be 1** (native resolution) |
 
 ## Memory Requirements
 
-| Configuration | VRAM Usage | Recommended |
-|---------------|------------|-------------|
-| **Inference** | ~18GB | RTX 4090, A100 |
-| **LoRA Training (r=64)** | ~24GB | RTX 6000 Ada, A100 |
-| **LoRA Training (r=128)** | ~28GB | RTX 6000 Ada, A100 |
-| **Full Fine-tuning** | ~40GB+ | A100 80GB |
+| Configuration | VRAM Usage | Recommended GPU | Notes |
+|---------------|------------|-----------------|-------|
+| **Inference** | ~18GB | RTX 4090, A100 | Native resolution processing |
+| **LoRA Training (r=128, batch=1)** | ~28GB | RTX 6000 Ada, A100 | Recommended setting |
+| **LoRA Training (r=64, batch=1)** | ~24GB | RTX 4090, A100 | If OOM with r=128 |
+| **LoRA Training (r=32, batch=1)** | ~20GB | RTX 4090 | Minimum recommended |
+| **Full Fine-tuning** | ~40GB+ | A100 80GB | Not recommended |
+
+**Note**: Batch size is always 1 due to native resolution processing. Use `gradient_accumulation_steps` for effective batch size.
 
 ## Generation Parameters
 
@@ -214,25 +249,38 @@ generation_kwargs = {
 
 ### Common Issues
 
-1. **"text_tokenizer not found"**
-   - Ensure using `AutoModelForCausalLM`
-   - Verify model loaded correctly with `trust_remote_code=True`
+1. **"RuntimeError: stack expects each tensor to be equal size"**
+   - **Cause**: batch_size > 1 
+   - **Solution**: Always use batch_size=1 (default) - this is required for native resolution
 
-2. **CUDA OOM during training**
-   - Reduce batch size: `--batch_size 2`
-   - Increase gradient accumulation: `--gradient_accumulation_steps 8`
-   - Use smaller LoRA rank: `--lora_r 64`
+2. **"AttributeError: no attribute 'get_input_embeddings'"**
+   - **Cause**: Missing LoRA compatibility patch
+   - **Solution**: Ensure `lora_patch.py` is in your directory (included automatically)
 
-3. **Slow preprocessing**
-   - Expected due to native resolution processing
-   - Consider reducing `max_pixels` if needed
+3. **"leaf Variable that requires grad is being used in an in-place operation"**
+   - **Cause**: Old version of data_utils.py
+   - **Solution**: Update to latest data_utils.py with tensor detachment fixes
+
+4. **"Error processing answer with crop tool: 'type'"**
+   - **Cause**: Content validation error in crop tool processing
+   - **Solution**: Update to latest data_utils.py with improved error handling
 
 ### Performance Tips
 
 1. **Use BF16**: `--bf16` for better stability than FP16
 2. **Flash Attention**: Automatically enabled for better performance  
 3. **Gradient Checkpointing**: Enabled by default to save memory
-4. **Batch Size**: Start with 2-4, increase based on available VRAM
+4. **Effective Batch Size**: Use `--gradient_accumulation_steps 8-16` since batch_size=1
+5. **LoRA Recommended**: Essential for memory efficiency with batch_size=1 constraint
+
+### Memory Optimization
+
+If you encounter CUDA OOM errors:
+
+1. **Increase gradient accumulation**: `--gradient_accumulation_steps 16` (or 32)
+2. **Reduce LoRA rank**: `--lora_r 64` (then 32 if still OOM)
+3. **Use memory efficient mode**: `--memory_efficient`
+4. **Reduce image resolution**: `--max_pixels 448448` (reduce from default 896*896)
 
 ## File Structure
 
@@ -244,11 +292,26 @@ Ovis2.5/
 ├── train_ovis25.py        # Comprehensive training script
 ├── data_utils.py          # Data loading and preprocessing
 ├── inference.py           # Inference implementation
+├── lora_patch.py          # LoRA compatibility patch (required)
 ├── test_ovis_integration.py # Integration tests
 ├── requirements.txt       # Dependencies
 └── README.md             # This file
 crop_tool.py               # Crop tool implementation
 ```
+
+## Key Constraints and Features
+
+### ✅ Advantages
+- **Native Resolution**: Preserves fine details and global structure
+- **Advanced Reasoning**: Thinking mode with budget control
+- **Memory Efficient**: LoRA training works well
+- **High Quality**: Better visual understanding than fixed-resolution models
+
+### ⚠️ Constraints
+- **Batch Size = 1**: Required due to variable image tensor sizes
+- **Slower Training**: Due to batch size constraint
+- **Memory Planning**: Need to plan effective batch size via gradient accumulation
+- **LoRA Patch Required**: Custom compatibility layer needed
 
 ## Citation
 

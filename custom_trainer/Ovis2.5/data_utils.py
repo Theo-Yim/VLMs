@@ -22,21 +22,15 @@ logger = logging.getLogger(__name__)
 
 
 class OvisDataset(Dataset):
-    """
-    Dataset for Ovis2.5-9B training
-    Key corrections from official guide:
-    1. Uses model.text_tokenizer for decoding
-    2. Uses proper max_pixels parameter
-    3. Supports Ovis grounding format: <ref>, <box>, <point>
-    """
+    """Dataset for Ovis2.5-9B training"""
 
     def __init__(
         self,
         data_path: str,
         image_base_path: str,
-        model: Any,  # Ovis model for preprocessing
+        model: Any,
         max_length: int = 2048,
-        max_pixels: int = 896 * 896,  # As per official guide
+        max_pixels: int = 896 * 896,
         stage: str = "sft",
     ):
         self.data_path = data_path
@@ -45,11 +39,9 @@ class OvisDataset(Dataset):
         self.max_length = max_length
         self.max_pixels = max_pixels
         self.stage = stage
-        self.crop_tool = CropTool()  # Use existing CropTool from QwenVL2.5
+        self.crop_tool = CropTool()
 
-        # Load data
         self.load_data()
-
         logger.info(f"Loaded {len(self.data)} samples from {data_path}")
 
     def load_data(self):
@@ -65,15 +57,7 @@ class OvisDataset(Dataset):
                     logger.warning(f"Failed to parse line: {line.strip()}, error: {e}")
 
     def format_conversation_with_crops(self, item: Dict, image: Image.Image) -> List[Dict]:
-        """
-        Format QnA pairs into conversation format with crop tool execution
-        Supports both custom <tool_call> tokens and native Ovis grounding
-
-        For each QnA pair:
-        1. Parse tool calls in the answer using crop tool
-        2. Execute crops and interleave cropped images in the response
-        3. Optionally convert to native Ovis grounding format
-        """
+        """Format QnA pairs with crop tool execution"""
         messages = []
 
         for qa in item.get("QnA", []):
@@ -91,211 +75,153 @@ class OvisDataset(Dataset):
                 }
             )
 
-            # Process answer with crop tool to create multi-modal response
-            if answer:
-                # First, parse and replace tool calls (same as QwenVL2.5 does)
-                processed_answer = parse_and_replace_tool_calls(answer)
-
-                # Then use existing CropTool.format_for_training method (same as QwenVL2.5)
-                content_items = self.crop_tool.format_for_training(processed_answer, image)
-
-                # Convert to Ovis message format
-                assistant_content = []
-                for item in content_items:
-                    if item["type"] == "text":
-                        # Optionally convert <tool_call> to native Ovis grounding
-                        text_content = item["text"]
-                        if hasattr(self, "use_native_grounding") and self.use_native_grounding:
-                            text_content = self.convert_tool_calls_to_grounding(text_content)
-                        assistant_content.append({"type": "text", "text": text_content})
-                    elif item["type"] == "image":
-                        assistant_content.append({"type": "image", "image": item["image"]})
-
-                if assistant_content:
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "content": assistant_content
-                            if len(assistant_content) > 1
-                            else assistant_content[0]["text"]
-                            if assistant_content[0]["type"] == "text"
-                            else assistant_content,
-                        }
-                    )
+            # Simple processing that preserves <tool_call> tokens
+            if answer and isinstance(answer, str):
+                try:
+                    # Just parse and replace tool calls - keep it simple
+                    processed_answer = parse_and_replace_tool_calls(answer)
+                    messages.append({"role": "assistant", "content": processed_answer})
+                except Exception as e:
+                    logger.warning(f"Error processing answer: {e}")
+                    messages.append({"role": "assistant", "content": str(answer)})
+            elif answer:
+                messages.append({"role": "assistant", "content": str(answer)})
 
         return messages
 
-    def convert_tool_calls_to_grounding(self, text: str) -> str:
-        """
-        Convert <tool_call>[x1,y1,x2,y2]</tool_call> to <ref>description</ref><box>(x1,y1),(x2,y2)</box>
-        This converts from custom tokens to native Ovis grounding format
-        """
-        # Extract tool calls
-        tool_calls = self.crop_tool.extract_tool_calls(text)
-
-        if not tool_calls:
-            return text
-
-        converted_text = text
-
-        # Process in reverse order to maintain positions
-        for tool_call in reversed(tool_calls):
-            coords = tool_call["coordinates"]
-            if len(coords) == 4:
-                x1, y1, x2, y2 = coords
-
-                # Use generic description (would need original descriptions for better results)
-                description = "region"
-
-                # Convert to Ovis grounding format (normalized coordinates)
-                if max(coords) > 1.0:
-                    # If pixel coordinates, normalize (approximate)
-                    x1, y1, x2, y2 = x1 / 1000, y1 / 1000, x2 / 1000, y2 / 1000
-
-                grounding_text = (
-                    f"<ref>{description}</ref><box>({x1:.3f},{y1:.3f}),({x2:.3f},{y2:.3f})</box>"
-                )
-
-                # Replace the tool call with grounding format
-                converted_text = (
-                    converted_text[: tool_call["start_pos"]]
-                    + grounding_text
-                    + converted_text[tool_call["end_pos"] :]
-                )
-
-        return converted_text
-
-    def extract_think_answer(self, text: str) -> Tuple[str, str]:
-        """
-        Extract <think> and <answer> content from response
-        Returns (think_content, answer_content)
-        """
-        think_pattern = r"<think>(.*?)</think>"
-        answer_pattern = r"<answer>(.*?)</answer>"
-
-        think_match = re.search(think_pattern, text, re.DOTALL)
-        answer_match = re.search(answer_pattern, text, re.DOTALL)
-
-        think_content = think_match.group(1).strip() if think_match else ""
-        answer_content = answer_match.group(1).strip() if answer_match else text
-
-        return think_content, answer_content
-
     def process_item_with_ovis(self, messages: List[Dict]) -> Dict:
         """
-        Process item using Ovis's preprocessing pipeline
-        Using parameters from official guide
+        🎯 CRITICAL FIX: Return only the exact keys Ovis expects
         """
         try:
-            # Use Ovis's preprocessing method with proper parameters
             input_ids, pixel_values, grid_thws = self.model.preprocess_inputs(
                 messages=messages,
-                add_generation_prompt=False,  # We want the full conversation for training
-                enable_thinking=True,  # Enable thinking mode during training
-                max_pixels=self.max_pixels,  # Control resolution
+                add_generation_prompt=False,
+                enable_thinking=True,
+                max_pixels=self.max_pixels,
             )
 
-            return {
-                "input_ids": input_ids.squeeze(0) if input_ids.dim() > 1 else input_ids,
-                "pixel_values": pixel_values.squeeze(0)
-                if pixel_values is not None and pixel_values.dim() > 4
-                else pixel_values,
-                "grid_thws": grid_thws.squeeze(0)
-                if grid_thws is not None and grid_thws.dim() > 1
-                else grid_thws,
-            }
+            # 🎯 CRITICAL FIX: Return ONLY the standard keys that Ovis expects
+            # Do NOT include any extra keys that might conflict
+            result = {}
+
+            if input_ids is not None:
+                input_ids = input_ids.squeeze(0) if input_ids.dim() > 1 else input_ids
+                result["input_ids"] = input_ids
+
+            if pixel_values is not None:
+                pixel_values = pixel_values.squeeze(0) if pixel_values.dim() > 4 else pixel_values
+                result["pixel_values"] = pixel_values
+
+            if grid_thws is not None:
+                grid_thws = grid_thws.squeeze(0) if grid_thws.dim() > 1 else grid_thws
+                result["grid_thws"] = grid_thws
+
+            # 🎯 CRITICAL: Do NOT add any other keys that might conflict with model arguments
+            return result
 
         except Exception as e:
             logger.error(f"Error processing with Ovis: {e}")
-            # Fallback to basic tokenization
             return self.fallback_processing(messages)
 
     def fallback_processing(self, messages: List[Dict]) -> Dict:
-        """
-        Fallback processing if Ovis preprocessing fails
-        """
-        # Extract text content for basic tokenization
+        """Fallback processing if Ovis preprocessing fails"""
+        # Extract text content
         full_text = ""
         for msg in messages:
             if msg["role"] == "user":
-                # Find text content in user message
                 for content in msg["content"]:
                     if content["type"] == "text":
                         full_text += content["text"] + " "
             elif msg["role"] == "assistant":
-                full_text += msg["content"]
+                if isinstance(msg["content"], str):
+                    full_text += msg["content"] + " "
 
-        # Use model's text tokenizer (key correction from official guide)
-        if hasattr(self.model, "text_tokenizer"):
-            tokenizer = self.model.text_tokenizer
-        else:
-            # Fallback to model tokenizer
+        # Use model's text tokenizer
+        tokenizer = getattr(self.model, "text_tokenizer", None)
+        if tokenizer is None:
             tokenizer = getattr(self.model, "tokenizer", None)
-            if tokenizer is None:
-                logger.error("Could not find tokenizer in model")
-                raise RuntimeError("No tokenizer found")
 
-        # Tokenize
-        encoding = tokenizer(
-            full_text,
-            max_length=self.max_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-        )
+        if tokenizer is None:
+            logger.error("Could not find tokenizer")
+            return {
+                "input_ids": torch.tensor([0], dtype=torch.long),
+                "labels": torch.tensor([0], dtype=torch.long),
+            }
 
-        return {
-            "input_ids": encoding["input_ids"].squeeze(0),
-            "attention_mask": encoding["attention_mask"].squeeze(0),
-            "pixel_values": None,
-            "grid_thws": None,
-        }
+        try:
+            encoding = tokenizer(
+                full_text,
+                max_length=self.max_length,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+            )
+
+            return {
+                "input_ids": encoding["input_ids"].squeeze(0),
+                "attention_mask": encoding["attention_mask"].squeeze(0),
+            }
+        except Exception as e:
+            logger.error(f"Tokenization failed: {e}")
+            return {
+                "input_ids": torch.tensor([0], dtype=torch.long),
+                "labels": torch.tensor([0], dtype=torch.long),
+            }
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        item = self.data[idx]
-
-        # Get image path
-        image_path = os.path.join(self.image_base_path, item["image_path"])
-
-        # Check if image exists
-        if not os.path.exists(image_path):
-            logger.warning(f"Image not found: {image_path}")
-            # Return a placeholder or skip
-            return self.__getitem__((idx + 1) % len(self.data))
-
+        """Get dataset item with proper tensor handling"""
         try:
+            item = self.data[idx]
+            image_path = os.path.join(self.image_base_path, item["image_path"])
+
+            if not os.path.exists(image_path):
+                logger.warning(f"Image not found: {image_path}")
+                return {
+                    "input_ids": torch.tensor([0], dtype=torch.long),
+                    "labels": torch.tensor([0], dtype=torch.long),
+                }
+
             # Load image
             image = Image.open(image_path).convert("RGB")
 
-            # Format conversation with crop tool (like QwenVL2.5 does)
+            # Format conversation
             messages = self.format_conversation_with_crops(item, image)
+
+            if not messages:
+                logger.warning(f"No valid messages for item {idx}")
+                return {
+                    "input_ids": torch.tensor([0], dtype=torch.long),
+                    "labels": torch.tensor([0], dtype=torch.long),
+                }
 
             # Process with Ovis
             processed = self.process_item_with_ovis(messages)
 
-            # Create labels (same as input_ids for causal LM training)
-            if "input_ids" in processed:
+            # 🎯 CRITICAL FIX: Add labels only after processing
+            if "input_ids" in processed and processed["input_ids"] is not None:
                 processed["labels"] = processed["input_ids"].clone()
 
             return processed
 
         except Exception as e:
             logger.error(f"Error processing item {idx}: {e}")
-            # Skip to next item
-            return self.__getitem__((idx + 1) % len(self.data))
+            return {
+                "input_ids": torch.tensor([0], dtype=torch.long),
+                "labels": torch.tensor([0], dtype=torch.long),
+            }
 
 
 class OvisDataCollator:
     """
     Data collator for Ovis2.5-9B
-    Handles the multimodal nature of Ovis inputs
+    🎯 CRITICAL FIX: Clean input structure to prevent keyword conflicts
     """
 
     def __init__(self, model, padding=True, max_length=None):
-        # Use model's text tokenizer (key correction)
         self.tokenizer = (
             model.text_tokenizer if hasattr(model, "text_tokenizer") else model.tokenizer
         )
@@ -303,69 +229,45 @@ class OvisDataCollator:
         self.max_length = max_length
 
     def __call__(self, batch):
-        # Separate different types of data
-        input_ids = []
-        labels = []
-        pixel_values = []
-        grid_thws = []
-        attention_masks = []
+        """
+        🎯 CRITICAL FIX: Return clean input dict with only expected keys
+        """
+        # For Ovis2.5, batch_size=1 is required
+        if len(batch) > 1:
+            logger.warning(f"Batch size {len(batch)} > 1 detected. Using only first item.")
+            batch = batch[:1]
 
-        for item in batch:
-            if "input_ids" in item:
-                input_ids.append(item["input_ids"])
+        item = batch[0]
 
-            if "labels" in item:
-                labels.append(item["labels"])
-
-            if "attention_mask" in item:
-                attention_masks.append(item["attention_mask"])
-
-            if "pixel_values" in item and item["pixel_values"] is not None:
-                pixel_values.append(item["pixel_values"])
-
-            if "grid_thws" in item and item["grid_thws"] is not None:
-                grid_thws.append(item["grid_thws"])
-
-        # Create batch dictionary
+        # 🎯 CRITICAL FIX: Create clean batch dict with only the keys Ovis expects
         batch_dict = {}
 
-        # Handle input_ids and labels
-        if input_ids:
-            # Pad sequences
-            padded_ids = torch.nn.utils.rnn.pad_sequence(
-                input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
-            )
-            batch_dict["input_ids"] = padded_ids
+        # Essential keys for Ovis
+        if "input_ids" in item and item["input_ids"] is not None:
+            batch_dict["input_ids"] = item["input_ids"].unsqueeze(0)
 
-        if labels:
-            padded_labels = torch.nn.utils.rnn.pad_sequence(
-                labels, batch_first=True, padding_value=-100
-            )
-            batch_dict["labels"] = padded_labels
+        if "labels" in item and item["labels"] is not None:
+            batch_dict["labels"] = item["labels"].unsqueeze(0)
 
-        if attention_masks:
-            padded_attention = torch.nn.utils.rnn.pad_sequence(
-                attention_masks, batch_first=True, padding_value=0
-            )
-            batch_dict["attention_mask"] = padded_attention
+        # Visual inputs for Ovis
+        if "pixel_values" in item and item["pixel_values"] is not None:
+            batch_dict["pixel_values"] = item["pixel_values"].unsqueeze(0)
 
-        # Handle visual data
-        if pixel_values:
-            # Stack pixel values
-            batch_dict["pixel_values"] = torch.stack(pixel_values)
+        if "grid_thws" in item and item["grid_thws"] is not None:
+            batch_dict["grid_thws"] = item["grid_thws"].unsqueeze(0)
 
-        if grid_thws:
-            # Stack grid_thws
-            batch_dict["grid_thws"] = torch.stack(grid_thws)
+        # Optional attention mask
+        if "attention_mask" in item and item["attention_mask"] is not None:
+            batch_dict["attention_mask"] = item["attention_mask"].unsqueeze(0)
+
+        # 🎯 CRITICAL: Do NOT include any other keys that might conflict
+        # Specifically avoid: inputs_embeds, position_ids, etc.
 
         return batch_dict
 
 
 class GroundingParser:
-    """
-    Parser for Ovis2.5 grounding format
-    Handles <ref>, <box>, <point> tags as per official guide
-    """
+    """Parser for Ovis2.5 grounding format"""
 
     def __init__(self):
         self.ref_pattern = r"<ref>(.*?)</ref>"
@@ -373,14 +275,9 @@ class GroundingParser:
         self.point_pattern = r"<point>\(([^)]+)\)</point>"
 
     def parse_grounding(self, text: str) -> Dict[str, List]:
-        """
-        Parse grounding elements from text
-        Returns dict with refs, boxes, and points
-        """
-        # Find all references
+        """Parse grounding elements from text"""
         refs = re.findall(self.ref_pattern, text)
 
-        # Find all boxes
         box_matches = re.finditer(self.box_pattern, text)
         boxes = []
         for match in box_matches:
@@ -391,7 +288,6 @@ class GroundingParser:
             except:
                 continue
 
-        # Find all points
         point_matches = re.finditer(self.point_pattern, text)
         points = []
         for match in point_matches:

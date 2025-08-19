@@ -1,13 +1,13 @@
 """
 Stage 2: Regional GRPO (R-GRPO) Training for Ovis2.5-9B
-Based on VLM-R3 paper and official Ovis2.5-9B guide
+🎯 FIXED: Disable gradient checkpointing to prevent in-place operation errors
 """
 
 import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
@@ -202,6 +202,16 @@ class OvisGRPOTrainer:
                 self.model_config.model_name, **model_kwargs
             )
 
+            # Apply LoRA compatibility patch before loading adapter
+            from lora_patch import patch_ovis_for_lora, validate_lora_compatibility
+
+            patch_ovis_for_lora(base_model)
+
+            # Validate the patch worked
+            if not validate_lora_compatibility(base_model):
+                logger.error("LoRA compatibility validation failed")
+                raise RuntimeError("Failed to make Ovis2.5 compatible with LoRA")
+
             # Load LoRA weights
             self.model = PeftModel.from_pretrained(
                 base_model, self.training_config.sft_checkpoint_path, is_trainable=True
@@ -212,9 +222,13 @@ class OvisGRPOTrainer:
                 self.training_config.sft_checkpoint_path, **model_kwargs
             )
 
-        # Enable gradient checkpointing if specified
-        if self.model_config.gradient_checkpointing:
-            self.model.gradient_checkpointing_enable()
+            # Apply LoRA compatibility patch for potential future use
+            from lora_patch import patch_ovis_for_lora
+
+            patch_ovis_for_lora(self.model)
+
+        # 🎯 CRITICAL FIX: Do NOT enable gradient checkpointing - causes in-place operation errors
+        logger.info("🚨 Gradient checkpointing DISABLED to prevent in-place operation errors")
 
         logger.info("Model loaded successfully")
 
@@ -237,7 +251,7 @@ class OvisGRPOTrainer:
             self.train_dataset,
             batch_size=self.training_config.mini_batch_size,
             shuffle=True,
-            num_workers=self.data_config.num_workers,
+            num_workers=0,  # Set to 0 for batch_size=1
         )
 
         logger.info(f"Train dataset size: {len(self.train_dataset)}")
@@ -277,7 +291,7 @@ class OvisGRPOTrainer:
         """
         Perform one GRPO training step using Ovis generation
         """
-        # Generate responses using Ovis-specific parameters
+        # 🎯 CRITICAL FIX: Use torch.no_grad() for generation to prevent gradient issues
         with torch.no_grad():
             generated_ids = self.model.generate(
                 inputs=batch["input_ids"],
@@ -433,130 +447,151 @@ def main():
     """Main training entry point"""
     import argparse
     import json
-    
+
     parser = argparse.ArgumentParser(description="Ovis2.5-9B R-GRPO Training")
-    
+
     # Configuration files
     parser.add_argument("--model_config", type=str, help="Path to model configuration JSON file")
     parser.add_argument("--data_config", type=str, help="Path to data configuration JSON file")
-    parser.add_argument("--grpo_config", type=str, help="Path to GRPO training configuration JSON file")
-    
+    parser.add_argument(
+        "--grpo_config", type=str, help="Path to GRPO training configuration JSON file"
+    )
+
     # Data paths (override config)
     parser.add_argument("--train_data", type=str, help="Path to training data JSONL file")
     parser.add_argument("--image_base_path", type=str, help="Base path for images")
-    
+
     # Model settings (override config)
     parser.add_argument("--model_name", type=str, help="Hugging Face model name or path")
-    parser.add_argument("--sft_checkpoint", type=str, help="Path to SFT checkpoint for GRPO training")
-    
+    parser.add_argument(
+        "--sft_checkpoint", type=str, help="Path to SFT checkpoint for GRPO training"
+    )
+
     # Training hyperparameters (override config)
     parser.add_argument("--learning_rate", type=float, help="Learning rate for training")
     parser.add_argument("--num_epochs", type=int, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, help="Training batch size")
-    parser.add_argument("--gradient_accumulation_steps", type=int, help="Gradient accumulation steps")
-    
+    parser.add_argument(
+        "--gradient_accumulation_steps", type=int, help="Gradient accumulation steps"
+    )
+
     # Ovis-specific parameters
-    parser.add_argument("--max_pixels", type=int, default=896*896, help="Maximum pixels for image processing")
-    parser.add_argument("--enable_thinking", action="store_true", default=True, help="Enable Ovis thinking mode")
-    parser.add_argument("--thinking_budget", type=int, default=2048, help="Thinking budget for Ovis generation")
-    
+    parser.add_argument(
+        "--max_pixels", type=int, default=896 * 896, help="Maximum pixels for image processing"
+    )
+    parser.add_argument(
+        "--enable_thinking", action="store_true", default=True, help="Enable Ovis thinking mode"
+    )
+    parser.add_argument(
+        "--thinking_budget", type=int, default=2048, help="Thinking budget for Ovis generation"
+    )
+
     # GRPO specific parameters
     parser.add_argument("--beta", type=float, help="KL penalty coefficient for GRPO")
-    parser.add_argument("--use_regional_rewards", action="store_true", default=True, help="Use regional rewards")
-    parser.add_argument("--global_reward_weight", type=float, default=0.5, help="Weight for global reward")
-    parser.add_argument("--region_reward_weight", type=float, default=0.5, help="Weight for regional reward")
-    
+    parser.add_argument(
+        "--use_regional_rewards", action="store_true", default=True, help="Use regional rewards"
+    )
+    parser.add_argument(
+        "--global_reward_weight", type=float, default=0.5, help="Weight for global reward"
+    )
+    parser.add_argument(
+        "--region_reward_weight", type=float, default=0.5, help="Weight for regional reward"
+    )
+
     # Output directory
-    parser.add_argument("--output_dir", type=str, default="outputs/grpo", help="Output directory for GRPO stage")
-    
+    parser.add_argument(
+        "--output_dir", type=str, default="outputs/grpo", help="Output directory for GRPO stage"
+    )
+
     # Other settings
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--fp16", action="store_true", help="Use FP16 training")
     parser.add_argument("--bf16", action="store_true", default=True, help="Use BF16 training")
-    
+
     args = parser.parse_args()
-    
+
     # Load configurations
     if args.model_config:
-        with open(args.model_config, 'r') as f:
+        with open(args.model_config, "r") as f:
             config_dict = json.load(f)
         model_config = ModelConfig(**config_dict)
     else:
         model_config = ModelConfig()
-    
+
     if args.data_config:
-        with open(args.data_config, 'r') as f:
+        with open(args.data_config, "r") as f:
             config_dict = json.load(f)
         data_config = DataConfig(**config_dict)
     else:
         data_config = DataConfig()
-    
+
     if args.grpo_config:
-        with open(args.grpo_config, 'r') as f:
+        with open(args.grpo_config, "r") as f:
             config_dict = json.load(f)
         training_config = GRPOTrainingConfig(**config_dict)
     else:
         training_config = GRPOTrainingConfig()
-    
+
     # Override configurations with command line arguments
     if args.model_name:
         model_config.model_name = args.model_name
-    
+
     if args.train_data:
         data_config.train_data_path = args.train_data
     if args.image_base_path:
         data_config.image_base_path = args.image_base_path
-    
+
     if args.max_pixels:
         data_config.max_pixels = args.max_pixels
-    
+
     if args.learning_rate:
         training_config.learning_rate = args.learning_rate
-    
+
     if args.num_epochs:
         training_config.num_train_epochs = args.num_epochs
-    
+
     if args.batch_size:
         training_config.mini_batch_size = args.batch_size
-    
+
     if args.gradient_accumulation_steps:
         training_config.gradient_accumulation_steps = args.gradient_accumulation_steps
-    
+
     # Ovis generation parameters
     if args.thinking_budget:
         training_config.generation_kwargs["thinking_budget"] = args.thinking_budget
-    
+
     training_config.generation_kwargs["enable_thinking"] = args.enable_thinking
-    
+
     training_config.output_dir = args.output_dir
-    
+
     if args.sft_checkpoint:
         training_config.sft_checkpoint_path = args.sft_checkpoint
-    
+
     if args.beta:
         training_config.beta = args.beta
-    
+
     training_config.seed = args.seed
-    
+
     if args.fp16:
         training_config.fp16 = True
         training_config.bf16 = False
     elif args.bf16:
         training_config.bf16 = True
         training_config.fp16 = False
-    
+
     # GRPO specific settings
     if args.use_regional_rewards:
         training_config.use_regional_rewards = True
         training_config.global_reward_weight = args.global_reward_weight
         training_config.region_reward_weight = args.region_reward_weight
-    
+
     # Print configuration summary
     logger.info("=" * 60)
     logger.info("OVIS2.5-9B R-GRPO TRAINING CONFIGURATION")
     logger.info("=" * 60)
     logger.info(f"Model: {model_config.model_name}")
     logger.info(f"SFT Checkpoint: {training_config.sft_checkpoint_path}")
+    logger.info(f"Gradient checkpointing: {model_config.gradient_checkpointing}")  # Should be False
     logger.info(f"Max pixels: {data_config.max_pixels}")
     logger.info(f"Thinking mode: {args.enable_thinking}")
     logger.info(f"Thinking budget: {args.thinking_budget}")
@@ -564,16 +599,18 @@ def main():
     logger.info(f"Learning rate: {training_config.learning_rate}")
     logger.info(f"Beta (KL penalty): {training_config.beta}")
     logger.info(f"Use regional rewards: {training_config.use_regional_rewards}")
-    logger.info(f"Mixed precision: {'bf16' if training_config.bf16 else 'fp16' if training_config.fp16 else 'fp32'}")
+    logger.info(
+        f"Mixed precision: {'bf16' if training_config.bf16 else 'fp16' if training_config.fp16 else 'fp32'}"
+    )
     logger.info("=" * 60)
-    
+
     # Initialize trainer
     trainer = OvisGRPOTrainer(
         model_config=model_config,
         data_config=data_config,
         training_config=training_config,
     )
-    
+
     # Start training
     trainer.train()
 

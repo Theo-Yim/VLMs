@@ -1,0 +1,41 @@
+# Ovis2.5-9B specific requirements
+# Based on official guide: https://huggingface.co/AIDC-AI/Ovis2.5-9B
+
+# Core dependencies with specific versions for Ovis2.5
+torch==2.4.0
+transformers==4.51.3
+numpy==1.25.0
+pillow==10.3.0
+moviepy==1.0.3
+
+# Flash attention for better performance
+flash-attn==2.7.0.post2
+
+# Training dependencies
+accelerate>=0.20.0
+peft>=0.4.0
+datasets>=2.12.0
+wandb>=0.15.0
+tensorboard>=2.13.0
+
+# TRL for GRPO training
+trl>=0.7.0
+
+# Additional utilities
+requests>=2.31.0
+tqdm>=4.65.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Data processing
+jsonlines>=3.1.0
+opencv-python>=4.8.0
+
+# Optional: For video processing
+# moviepy==1.0.3 (already included above)
+
+# Development and testing
+pytest>=7.4.0
+black>=23.7.0
+flake8>=6.0.0
