@@ -23,6 +23,10 @@ from ovis.util.utils import smart_unit, rank0_print, rankN_print, replace_torch_
 
 
 def load_model(model_args: ModelArguments, training_args: TrainingArguments):
+    rankN_print(BEGIN_LINE)
+    rankN_print(f'Loading Ovis model from: {training_args.ovis_pretrained_path}')
+    rankN_print(END_LINE)
+    
     model, loading_info = Ovis.from_pretrained(
         training_args.ovis_pretrained_path,
         output_loading_info=True,

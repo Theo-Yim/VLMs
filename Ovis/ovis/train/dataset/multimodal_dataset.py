@@ -6,7 +6,7 @@ from typing import Dict, Sequence, Union, List
 
 import numpy as np
 import torch
-import moviepy.editor as mp
+import moviepy as mp
 from PIL import Image
 import torch.nn.functional as F
 from torch.utils.data import Dataset

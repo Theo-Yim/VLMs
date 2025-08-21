@@ -8,8 +8,8 @@ from ovis.util.utils import rankN_print
 
 @dataclass
 class ModelArguments:
-    llm_name_or_path: Optional[str] = field(default=None)
-    vit_name_or_path: Optional[str] = field(default=None)
+    llm_name_or_path: Optional[str] = field(default="Qwen/Qwen3-8B")
+    vit_name_or_path: Optional[str] = field(default="google/siglip2-so400m-patch16-512")
     visual_vocab_size: int = field(default=65536)
     conversation_formatter_class: str = field(default=None)
     attn_implementation: Optional[str] = field(default=None)
@@ -27,7 +27,7 @@ class TrainingArguments(transformers.TrainingArguments):
     data_info_version: Optional[str] = field(default=None)
     data_name: Optional[str] = field(default=None)  # a|b|c
     data_type: Optional[str] = field(default=None)  # caption, conversation
-    ovis_pretrained_path: Optional[str] = field(default=None)
+    ovis_pretrained_path: Optional[str] = field(default="AIDC-AI/Ovis2.5-9B")
     stage: Optional[int] = field(default=None)
     train_modules: Optional[str] = field(default=None)
     cache_dir: Optional[str] = field(default=None)
@@ -46,9 +46,9 @@ class TrainingArguments(transformers.TrainingArguments):
     single_image_min_pixels: int = field(default=448*448)
     single_image_max_pixels: int = field(default=1792*1344)
     multiple_image_min_pixels: int = field(default=448*448)
-    multiple_image_max_pixels: int = field(default=448*448)
+    multiple_image_max_pixels: int = field(default=896*896)
     video_min_pixels: int = field(default=448*448)
-    video_max_pixels: int = field(default=448*448)
+    video_max_pixels: int = field(default=896*896)
 
     def __post_init__(self):
         if self.min_lr_rate is not None:
