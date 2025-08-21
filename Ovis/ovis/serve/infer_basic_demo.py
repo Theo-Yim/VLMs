@@ -1,6 +1,6 @@
 import torch
 from PIL import Image
-from ovis.model.modeling_ovis import Ovis
+from ovis.model.modeling_ovis2_5 import Ovis2_5
 
 # If you need video support, make sure moviepy is installed first:
 #   pip install moviepy==1.0.3
@@ -11,7 +11,7 @@ except Exception:
     _HAS_MOVIEPY = False
 
 
-def run_single_image_example(model: Ovis, image_path: str) -> None:
+def run_single_image_example(model: Ovis2_5, image_path: str) -> None:
     """
     Run an inference example with a single image input.
     """
@@ -33,7 +33,7 @@ def run_single_image_example(model: Ovis, image_path: str) -> None:
     print(f"\nResponse:\n{response}")
 
 
-def run_multi_image_example(model: Ovis, image_paths: list) -> None:
+def run_multi_image_example(model: Ovis2_5, image_paths: list) -> None:
     """
     Run an inference example with multiple image inputs.
     """
@@ -55,7 +55,7 @@ def run_multi_image_example(model: Ovis, image_paths: list) -> None:
     print(f"\nResponse:\n{response}")
 
 
-def run_video_example(model: Ovis, video_path: str, num_frames: int = 8) -> None:
+def run_video_example(model: Ovis2_5, video_path: str, num_frames: int = 8) -> None:
     """
     Run an inference example with a video input.
     """
@@ -89,7 +89,7 @@ def run_video_example(model: Ovis, video_path: str, num_frames: int = 8) -> None
     print(f"\nResponse:\n{response}")
 
 
-def run_text_only_example(model: Ovis) -> None:
+def run_text_only_example(model: Ovis2_5) -> None:
     """
     Run an inference example with text-only input.
     """
@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     print("Loading model, please wait...")
     model = (
-        Ovis.from_pretrained(
+        Ovis2_5.from_pretrained(
             model_path,
             torch_dtype=torch.bfloat16,
             trust_remote_code=True,

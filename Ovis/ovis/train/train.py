@@ -11,8 +11,8 @@ from torch.utils.data import ConcatDataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, AutoModel, Trainer
 from transformers.trainer_utils import set_seed
 
-from ovis.model.configuration_ovis import OvisConfig
-from ovis.model.modeling_ovis import Ovis, VisualTokenizer
+from ovis.model.configuration_ovis2_5 import Ovis2_5_Config
+from ovis.model.modeling_ovis2_5 import Ovis2_5, VisualTokenizer
 from ovis.train.arguments import ModelArguments, TrainingArguments
 from ovis.train.callback import MonitorCallback
 from ovis.train.dataset.caption_dataset import CaptionDataset
@@ -27,7 +27,7 @@ def load_model(model_args: ModelArguments, training_args: TrainingArguments):
     rankN_print(f'Loading Ovis model from: {training_args.ovis_pretrained_path}')
     rankN_print(END_LINE)
     
-    model, loading_info = Ovis.from_pretrained(
+    model, loading_info = Ovis2_5.from_pretrained(
         training_args.ovis_pretrained_path,
         output_loading_info=True,
         trust_remote_code=True
@@ -49,7 +49,7 @@ def load_model(model_args: ModelArguments, training_args: TrainingArguments):
     return model
 
 
-def load_data(model: Ovis, training_args: TrainingArguments):
+def load_data(model: Ovis2_5, training_args: TrainingArguments):
     # construct data module
     if training_args.data_type == 'caption':
         train_dataset = CaptionDataset(model, training_args)

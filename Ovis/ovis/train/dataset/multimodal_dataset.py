@@ -12,13 +12,13 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer
 
-from ovis.model.modeling_ovis import Ovis
+from ovis.model.modeling_ovis2_5 import Ovis2_5
 from ovis.train.arguments import TrainingArguments
 from ovis.util.constants import IGNORE_ID, BEGIN_LINE, END_LINE, VISUAL_ATOM_ID, INDICATOR_IDS
 
 
 class MultimodalDataset(Dataset):
-    def __init__(self, name: str, info: Dict, model: Ovis, training_args: TrainingArguments):
+    def __init__(self, name: str, info: Dict, model: Ovis2_5, training_args: TrainingArguments):
         self.name = name
         self.model = model
         self.training_args = training_args

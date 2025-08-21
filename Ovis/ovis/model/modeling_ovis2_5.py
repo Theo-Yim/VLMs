@@ -21,7 +21,7 @@ from transformers.generation.utils import GenerateOutput
 from transformers.modeling_outputs import BaseModelOutputWithNoAttention
 from transformers.modeling_utils import PreTrainedModel
 
-from .configuration_ovis2_5 import Siglip2NavitConfig, Ovis2_5_Config
+from ovis.model.configuration_ovis2_5 import Siglip2NavitConfig, Ovis2_5_Config
 
 IMAGE_PLACEHOLDER = "<image>"
 IMAGE_PLACEHOLDER_ID = -200

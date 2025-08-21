@@ -6,9 +6,9 @@ import gradio as gr
 import moviepy.editor as mp
 import numpy as np
 import torch
-from ovis.model.modeling_ovis import Ovis 
+from ovis.model.modeling_ovis2_5 import Ovis2_5 
 
-model: Ovis = None
+model: Ovis2_5 = None
 
 def load_video_frames(video_path: Optional[str], n_frames: int = 8) -> Optional[List[PIL.Image.Image]]:
     """Extract a fixed number of frames from the video file."""
@@ -105,7 +105,7 @@ def build_demo(model_path: str, gpu: int):
     global model
     device = f"cuda:{gpu}"
     print(f"Loading model {model_path} to device {device}...")
-    model = Ovis.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map=device).eval()
+    model = Ovis2_5.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map=device).eval()
     print("Model loaded successfully.")
 
     custom_css = "#output_md .prose { font-size: 18px !important; }"

@@ -62,11 +62,11 @@
       "conversations": [
         {
           "from": "human",
-          "value": "<image>\nFind the red apple in the image. Please provide the bounding box coordinates."
+          "value": "<image>\nFind the <ref>red apple</ref> in the image. Please provide the bounding box coordinates."
         },
         {
           "from": "gpt",
-          "value": "I can see the red apple in the image. Here are the bounding box coordinates:\n\n<box>(0.245, 0.312), (0.387, 0.456)</box>\n\nThe red apple is located in the center-left portion of the image, appearing fresh and vibrant."
+          "value": "I can see the <ref>red apple</ref> in the image. Here are the bounding box coordinates:\n\n<box>(0.245, 0.312), (0.387, 0.456)</box>\n\nThe <ref>red apple</ref> is located in the center-left portion of the image, appearing fresh and vibrant."
         }
       ]
     },
