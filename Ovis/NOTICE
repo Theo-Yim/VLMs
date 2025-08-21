@@ -1,0 +1,45 @@
+NOTICE for Superb-AI Project
+============================
+
+Project: Superb-AI / Ovis-S
+Primary copyright holder: Superb-AI (2025)
+
+This project is distributed under the GNU General Public License v3 (GPL-3.0-or-later).
+Full license text is included in: ./LICENSE
+
+--------------------------------------------------------------------------------
+Included third-party models and attributions
+--------------------------------------------------------------------------------
+This distribution contains third-party models and components. The original copyright
+and license terms for these components remain in effect. When redistributing, you must
+preserve the original copyright and license texts for the components listed below.
+
+1) Qwen3-8B
+   - Source: https://huggingface.co/Qwen/Qwen3-8B
+   - License: Apache License 2.0
+   - Original copyright and license included at: licenses/Qwen3-8B/LICENSE
+   - Note: Check the model card for additional usage restrictions or dataset attributions.
+
+2) Siglip2
+   - Source: https://huggingface.co/google/siglip2-so400m-patch16-512
+   - License: Apache License 2.0
+   - Original copyright and license included at: licenses/Siglip2/LICENSE
+
+3) Ovis2.5-9B
+   - Source: https://huggingface.co/AIDC-AI/Ovis2.5-9B
+   - License: Apache License 2.0
+   - Original copyright and license included at: licenses/Ovis2.5-9B/LICENSE
+
+--------------------------------------------------------------------------------
+Important legal and compliance notes
+--------------------------------------------------------------------------------
+ - Apache-2.0 components are compatible with GPL-3.0 and may be distributed together,
+   provided their original copyright notices and license texts are preserved.
+ - Modifications to third-party components must preserve any required notices and follow
+   the original license obligations (e.g., Modified-file notices for Apache-2.0).
+ - Contributions from other authors retain their original copyright. Do not relicense
+   someone else's contributions without explicit permission.
+ - Model weights/checkpoints may be subject to additional restrictions — consult each
+   model's license and model card before redistributing.
+
+Contact: legal@superb-ai.example
