@@ -25,7 +25,7 @@ class ConversationDataset(MultimodalDataset):
         sample = self.samples[i]
         conversations = sample["conversations"]
 
-        # try:
+        # 이미지/비디오 처리 (기존과 동일)
         images = None
         videos = None
         n_image_or_frame = 0
@@ -46,6 +46,7 @@ class ConversationDataset(MultimodalDataset):
             videos = [video]
             n_image_or_frame = len(video)
 
+        # 픽셀 설정 (기존과 동일)
         if images is None and videos is None:
             min_pixels = 0
             max_pixels = 0
@@ -64,15 +65,26 @@ class ConversationDataset(MultimodalDataset):
         if max_pixels < 0:
             max_pixels = max(min_pixels, self.training_args.single_image_max_pixels // n_image_or_frame)
 
-        prompt, input_ids, pixel_values, grid_thws, labels = self.model.preprocess_inputs(
-            conversations,
-            images=images,
-            videos=videos,
+        # ======= 핵심 수정 부분 시작 =======
+        
+        # 1. conversations → messages 변환
+        messages, has_think_tag = self._convert_conversations_to_messages(conversations, images, videos)
+        
+        # 2. Ovis2.5 preprocess_inputs 호출 (labels 없이)
+        input_ids, pixel_values, grid_thws = self.model.preprocess_inputs(
+            messages=messages,
             min_pixels=min_pixels,
             max_pixels=max_pixels,
-            generation_preface=None,
-            return_labels=True,
+            add_generation_prompt=False,  # assistant 메시지 이미 포함되어 있음
+            enable_thinking=has_think_tag
         )
+        
+        # 3. Labels 생성
+        labels = self._generate_labels(input_ids, messages)
+        
+        # ======= 핵심 수정 부분 끝 =======
+
+        # 길이 제한 (기존과 동일)
         if pixel_values is None:
             input_ids, pixel_values, grid_thws, labels = self.truncate_inputs(
                 input_ids, pixel_values, grid_thws, labels, max_length=self.training_args.text_max_length
@@ -81,8 +93,9 @@ class ConversationDataset(MultimodalDataset):
             input_ids, pixel_values, grid_thws, labels = self.truncate_inputs(
                 input_ids, pixel_values, grid_thws, labels, max_length=self.training_args.multimodal_max_length
             )
+        
         assert self.text_tokenizer.pad_token_id not in input_ids, \
-            "The sample's text contains a padding token: `{self.text_tokenizer.pad_token}`"
+            f"The sample's text contains a padding token: `{self.text_tokenizer.pad_token}`"
 
         del sample
         return dict(
@@ -92,3 +105,94 @@ class ConversationDataset(MultimodalDataset):
             attention_mask=torch.full_like(input_ids, fill_value=True, dtype=torch.bool),
             labels=labels
         )
+    
+    def _convert_conversations_to_messages(self, conversations, images, videos):
+        """conversations 형태를 messages 형태로 변환"""
+        messages = []
+        has_think_tag = False
+
+        assert len(conversations) < 3, "Multi-turn conversations are not supported yet."
+        
+        for conv in conversations:
+            role = "user" if conv["from"] == "human" else "assistant"
+            
+            if role == "user":
+                # User 메시지에 이미지/비디오 추가
+                content = []
+                
+                # 이미지 추가
+                if images is not None:
+                    for image in images:
+                        content.append({"type": "image", "image": image})
+                
+                # 비디오 추가
+                if videos is not None:
+                    content.append({"type": "video", "video": videos[0]})
+                
+                # 텍스트 추가
+                content.append({"type": "text", "text": conv["value"]})
+                
+                messages.append({
+                    "role": role,
+                    "content": content
+                })
+            else:
+                # Assistant 메시지
+                messages.append({
+                    "role": role,
+                    "content": [{"type": "text", "text": conv["value"]}]
+                })
+                has_think_tag = conv["value"].startswith("<think>")
+        
+        return messages, has_think_tag
+    
+    def _generate_labels(self, input_ids, messages):
+        """input_ids에서 labels 생성 - assistant 부분만 학습 대상으로 설정"""
+        input_ids_list = input_ids[0].tolist()  # [1, seq_len] → [seq_len]
+        labels = [IGNORE_ID] * len(input_ids_list)
+        
+        try:
+            # <|im_start|>assistant 토큰 찾기
+            im_start_token = "<|im_start|>"
+            assistant_token = "assistant"
+            
+            # 토큰화해서 시퀀스 찾기
+            im_start_ids = self.text_tokenizer.encode(im_start_token, add_special_tokens=False)
+            assistant_ids = self.text_tokenizer.encode(assistant_token, add_special_tokens=False)
+            
+            # <|im_start|>assistant 시퀀스 찾기
+            target_sequence = im_start_ids + assistant_ids
+            
+            # input_ids에서 이 시퀀스 찾기
+            assistant_start_pos = None
+            for i in range(len(input_ids_list) - len(target_sequence) + 1):
+                if input_ids_list[i:i+len(target_sequence)] == target_sequence:
+                    assistant_start_pos = i + len(target_sequence)
+                    break
+            
+            if assistant_start_pos is not None:
+                # 줄바꿈 토큰 건너뛰기 (선택적)
+                while (assistant_start_pos < len(input_ids_list) and 
+                       self.text_tokenizer.decode([input_ids_list[assistant_start_pos]]).strip() == ""):
+                    assistant_start_pos += 1
+                
+                # <|im_start|>assistant 이후부터 학습 대상
+                # 단, <|im_end|> 토큰은 제외
+                im_end_ids = self.text_tokenizer.encode("<|im_end|>", add_special_tokens=False)
+                
+                # assistant_start_pos부터 끝까지 또는 <|im_end|>까지
+                end_pos = len(input_ids_list)
+                for i in range(assistant_start_pos, len(input_ids_list) - len(im_end_ids) + 1):
+                    if input_ids_list[i:i+len(im_end_ids)] == im_end_ids:
+                        end_pos = i
+                        break
+                
+                # Assistant 응답 부분만 학습 대상으로 설정
+                if end_pos > assistant_start_pos:
+                    labels[assistant_start_pos:end_pos] = input_ids_list[assistant_start_pos:end_pos]
+                    
+        except Exception as e:
+            # 에러 발생 시 전체를 IGNORE_ID로 유지 (안전)
+            logging.warning(f"Failed to generate labels: {e}. Using all IGNORE_ID.")
+        
+        return torch.tensor(labels, dtype=torch.long).unsqueeze(0)  # [seq_len] → [1, seq_len]

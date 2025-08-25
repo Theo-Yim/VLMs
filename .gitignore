@@ -3,6 +3,7 @@ InternVL3/samples/
 .vscode/
 *.pkl
 Ovis/checkpoints/
+*.safetensors
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

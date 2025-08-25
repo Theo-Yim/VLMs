@@ -13,7 +13,7 @@
     "video_min_pixels": 200704,
     "video_max_pixels": 802816,
     
-    "output_dir": "./checkpoints/ovis25_finetune",
+    "output_dir": "./Ovis/checkpoints/ovis25_finetune",
     "overwrite_output_dir": true,
     "do_train": true,
     "do_eval": false,
@@ -52,5 +52,6 @@
     "remove_unused_columns": false,
     "report_to": [],
     
-    "packing": false
+    "packing": false,
+    "distribute_gpus": true
   }

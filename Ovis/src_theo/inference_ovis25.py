@@ -15,7 +15,7 @@ from transformers import TextIteratorStreamer
 
 # Instead of using: from transformers import AutoModelForCausalLM
 # We'll use the custom modeling file
-from Ovis.HF_Repo.modeling_ovis2_5 import Ovis2_5
+from ovis.model.modeling_ovis2_5 import Ovis2_5
 
 
 class BudgetAwareTextStreamer(TextIteratorStreamer):
@@ -489,12 +489,24 @@ def main():
     print("Initializing Ovis2.5 model...")
     ovis = Ovis25Inference(model_path="AIDC-AI/Ovis2.5-9B")
 
+    # Example 2: Mathematical reasoning with thinking mode and budget
+    print("\n=== Mathematical Reasoning with Thinking Mode ===")
+    math_response = ovis.single_image_inference(
+        image_input="/workspace/VLMs/Ovis/src_theo/sample_data/sample_small.png",
+        text_prompt="<image>\nAnalyze this mathematical content step by step.",
+        enable_thinking=True,
+        enable_thinking_budget=True,
+        thinking_budget=2048,  # Fixed: Using correct default
+        max_new_tokens=3072,  # Fixed: Must be > thinking_budget + 25
+    )
+    print(f"Math Response: {math_response}")
+
     # Example 1: Single image analysis with standard parameters
     print("\n=== Single Image Analysis ===")
     image_url = "https://cdn-uploads.huggingface.co/production/uploads/658a8a837959448ef5500ce5/TIlymOb86R6_Mez3bpmcB.png"
     response = ovis.single_image_inference(
         image_input=image_url,
-        text_prompt="What do you see in this image? Describe it in detail.",
+        text_prompt="<image>\nWhat do you see in this image? Describe it in detail.",
         enable_thinking=False,
         max_new_tokens=1024,
     )
@@ -504,7 +516,7 @@ def main():
     print("\n=== Mathematical Reasoning with Thinking Mode ===")
     math_response = ovis.single_image_inference(
         image_input=image_url,
-        text_prompt="Calculate the sum of the numbers in the middle box in figure (c).",
+        text_prompt="<image>\nCalculate the sum of the numbers in the middle box in figure (c).",
         enable_thinking=True,
         enable_thinking_budget=True,
         thinking_budget=2048,  # Fixed: Using correct default
@@ -516,7 +528,7 @@ def main():
     print("\n=== Complex Reasoning without Budget Limit ===")
     complex_response = ovis.single_image_inference(
         image_input=image_url,
-        text_prompt="Analyze this image step by step and provide detailed insights about its composition, mathematical elements, and educational purpose.",
+        text_prompt="<image>\nAnalyze this image step by step and provide detailed insights about its composition, mathematical elements, and educational purpose.",
         enable_thinking=True,
         enable_thinking_budget=False,  # No budget limit
         max_new_tokens=4096,  # Higher for complex reasoning
@@ -549,7 +561,7 @@ def main():
     print("\n=== Visual Grounding ===")
     grounding_response = ovis.grounding_inference(
         image_input=image_url,
-        text_prompt="Find the <ref>mathematical equations</ref> in the image.",
+        text_prompt="<image>\nFind the <ref>mathematical equations</ref> in the image.",
         request_type="box",
     )
     print(f"Grounding Response: {grounding_response}")
@@ -558,7 +570,7 @@ def main():
     print("\n=== OCR and Document Analysis ===")
     ocr_response = ovis.single_image_inference(
         image_input=image_url,
-        text_prompt="Extract all text from this image and organize it in a structured format.",
+        text_prompt="<image>\nExtract all text from this image and organize it in a structured format.",
         max_new_tokens=1024,
     )
     print(f"OCR Response: {ocr_response}")

@@ -110,10 +110,33 @@ class MultimodalDataset(Dataset):
         if num_visual_atom > 0:
             vit = self.model.visual_tokenizer.vit
             ratio = vit.config.temporal_patch_size * vit.config.hidden_stride ** 2
+            
+            # Calculate expected visual atoms from each image/video
+            expected_visual_atoms = []
             cumsum_patches = grid_thws.prod(dim=1).cumsum(dim=0)
-            last_grid_index = (cumsum_patches // ratio == num_visual_atom).nonzero().item()
-            pixel_values = pixel_values[:cumsum_patches[last_grid_index]]
-            grid_thws = grid_thws[:last_grid_index+1]
+            
+            for i, grid_thw in enumerate(grid_thws):
+                patches_per_item = grid_thw.prod().item()
+                visual_atoms_per_item = patches_per_item // ratio
+                expected_visual_atoms.append(visual_atoms_per_item)
+            
+            # Find how many complete images we can keep
+            current_visual_atoms = 0
+            keep_items = 0
+            for i, atoms_needed in enumerate(expected_visual_atoms):
+                if current_visual_atoms + atoms_needed <= num_visual_atom:
+                    current_visual_atoms += atoms_needed
+                    keep_items = i + 1
+                else:
+                    break
+            
+            if keep_items > 0:
+                # Keep pixel_values and grid_thws for complete images only
+                pixel_values = pixel_values[:cumsum_patches[keep_items-1]]
+                grid_thws = grid_thws[:keep_items]
+            else:
+                # No complete visual items can be kept
+                pixel_values, grid_thws = None, None
         else:
             pixel_values, grid_thws = None, None
 
@@ -135,7 +158,8 @@ class DataCollatorForMultimodalDataset:
             padding_value=self.text_tokenizer.pad_token_id
         )
         pixel_values = [x for x in pixel_values if x is not None]
-        pixel_values = torch.cat(pixel_values, dim=0) if len(pixel_values) > 0 else None
+        # pixel_values = torch.cat(pixel_values, dim=0) if len(pixel_values) > 0 else None
+        pixel_values = torch.stack(pixel_values, dim=0) if len(pixel_values) > 0 else None
         grid_thws = [x for x in grid_thws if x is not None]
         grid_thws = torch.cat(grid_thws, dim=0) if len(grid_thws) > 0 else None
         attention_mask = torch.nn.utils.rnn.pad_sequence(
