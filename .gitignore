@@ -2,6 +2,7 @@ data_tmp/
 InternVL3/samples/
 .vscode/
 *.pkl
+Ovis/checkpoints/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

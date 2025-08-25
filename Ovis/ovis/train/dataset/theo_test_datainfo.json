@@ -1,0 +1,8 @@
+{
+    "test_dataset": {
+        "meta_file": "./Ovis/src_theo/sample_data/train_data.json",
+        "storage_type": "hybrid",
+        "data_format": "conversation",
+        "image_dir": "./Ovis/src_theo/sample_data/"
+    }
+}

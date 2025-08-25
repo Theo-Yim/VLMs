@@ -16,7 +16,7 @@ language:
 </div>
 
 <p align="center">
-  <a href="https://github.com/AIDC-AI/Ovis/blob/main/docs/Ovis2_5_Tech_Report.pdf"><img src="https://img.shields.io/badge/📖_Technical_Report-Ovis2.5-b31b1b.svg" alt="technical report"></a>
+  <a href="https://arxiv.org/abs/2508.11737"><img src="https://img.shields.io/badge/📖_Technical_Report-Ovis2.5-b31b1b.svg" alt="technical report"></a>
   <a href="https://github.com/AIDC-AI/Ovis"><img src="https://img.shields.io/badge/GitHub-AIDC--AI/Ovis-blue?style=flat&logo=github" alt="code"></a>
   <a href="https://huggingface.co/spaces/AIDC-AI/Ovis2.5-9B"><img src="https://img.shields.io/badge/🎨_HF_Spaces-AIDC--AI/Ovis2.5--9B-lightblack" alt="demo"></a>
   <a href="https://huggingface.co/collections/AIDC-AI/ovis25-689ec1474633b2aab8809335"><img src="https://img.shields.io/badge/🤗_Models-AIDC--AI/Ovis2.5-yellow" alt="models"></a>
@@ -49,7 +49,7 @@ Building on these advances, **Ovis2.5-9B** achieves an average score of 78.3 on 
 
 ## Quick Inference
 
-Below is a simple example demonstrating how to run Ovis2.5 with a single image input.
+Below is a simple example demonstrating how to run Ovis2.5 with a single image input. For accelerated inference with **vLLM**, refer to [GitHub](https://github.com/AIDC-AI/Ovis).
 
 First, install the required dependencies:
 
@@ -135,7 +135,7 @@ End your response with 'Final answer: '.
 <details>
 <summary>Optional: Streaming (Advanced)</summary>
 
-When using the thinking budget (two-phase generation), the default `TextIteratorStreamer` is not compatible. If you need streaming output, use the helper below (recommended for streaming with or without budget).
+To support thinking budget, we modified the implementation of the Ovis `generate` method and the default `TextIteratorStreamer` is now incompatible. If you need to stream model output, be sure to use the helper class below.
 
 ```python
 # --- Budget-aware streamer helper ---
@@ -162,7 +162,7 @@ class BudgetAwareTextStreamer(TextIteratorStreamer):
         pass
 ```
 
-Example usage (replacing the blocking decode in the main demo):
+Example usage:
 
 ```python
 streamer = BudgetAwareTextStreamer(
@@ -316,7 +316,7 @@ We evaluate Ovis2.5 using [VLMEvalKit](https://github.com/open-compass/VLMEvalKi
 
 ## Citation
 If you find Ovis useful, please consider citing the paper
-```
+```bibtex
 @article{lu2025ovis25technicalreport,
   title={Ovis2.5 Technical Report}, 
   author={Shiyin Lu and Yang Li and Yu Xia and Yuwei Hu and Shanshan Zhao and Yanqing Ma and Zhichao Wei and Yinglun Li and Lunhao Duan and Jianshan Zhao and Yuxuan Han and Haijun Li and Wanying Chen and Junke Tang and Chengkun Hou and Zhixing Du and Tianli Zhou and Wenjie Zhang and Huping Ding and Jiahe Li and Wen Li and Gui Hu and Yiliang Gu and Siran Yang and Jiamang Wang and Hailong Sun and Yibo Wang and Hui Sun and Jinlong Huang and Yuping He and Shengze Shi and Weihong Zhang and Guodong Zheng and Junpeng Jiang and Sensen Gao and Yi-Feng Wu and Sijia Chen and Yuhui Chen and Qing-Guo Chen and Zhao Xu and Weihua Luo and Kaifu Zhang},

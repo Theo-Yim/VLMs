@@ -21,23 +21,27 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union, Tuple
+from typing import Any, Callable, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.init import _calculate_fan_in_and_fan_out
-from flash_attn import flash_attn_varlen_func
-from flash_attn.layers.rotary import apply_rotary_emb
 
 
 from transformers.activations import ACT2FN
-# from transformers.modeling_layers import GradientCheckpointingLayer
 
+# from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_outputs import BaseModelOutputWithNoAttention
 from transformers.modeling_utils import PreTrainedModel
+from transformers.utils import is_flash_attn_2_available
+
 from .configuration_siglip2_navit import Siglip2NavitConfig
+
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_varlen_func
+    from flash_attn.layers.rotary import apply_rotary_emb
 
 
 __all__ = ["Siglip2NavitModel"]
@@ -230,6 +234,28 @@ def apply_rotary_pos_emb_flashatt(
     return q_embed, k_embed
 
 
+# Copied from transformers.models.llama.modeling_llama.rotate_half
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
+
+
 class Siglip2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -275,14 +301,41 @@ class Siglip2Attention(nn.Module):
 
         if self.use_rope:
             cos, sin = position_embeddings
-            queries, keys = apply_rotary_pos_emb_flashatt(queries.unsqueeze(0), keys.unsqueeze(0), cos, sin)
+            if is_flash_attn_2_available():
+                queries, keys = apply_rotary_pos_emb_flashatt(queries.unsqueeze(0), keys.unsqueeze(0), cos, sin)
+            else:
+                queries, keys = apply_rotary_pos_emb_vision(queries.unsqueeze(0), keys.unsqueeze(0), cos, sin)
             queries = queries.squeeze(0)
             keys = keys.squeeze(0)
 
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-        attn_output = flash_attn_varlen_func(queries, keys, values, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
-                                            seq_length, -1
-                                        )
+        if is_flash_attn_2_available():
+            attn_output = flash_attn_varlen_func(queries, keys, values, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
+                                                seq_length, -1
+                                            )
+        else:
+            batch_size = cu_seqlens.shape[0] - 1
+            outputs = []
+            cu = cu_seqlens.tolist()
+            for i in range(batch_size):
+                start_idx = cu[i]
+                end_idx = cu[i + 1]
+                # Each sequence is processed independently.
+                q_i = queries[start_idx:end_idx].unsqueeze(0)
+                k_i = keys[start_idx:end_idx].unsqueeze(0)
+                v_i = values[start_idx:end_idx].unsqueeze(0)
+                # (1, seq_len, num_heads, head_dim) ->
+                # (1, num_heads, seq_len, head_dim)
+                q_i, k_i, v_i = [x.transpose(1, 2) for x in (q_i, k_i, v_i)]
+                output_i = F.scaled_dot_product_attention(q_i,
+                                                        k_i,
+                                                        v_i,
+                                                        dropout_p=0.0)
+                # (1, num_heads, seq_len, head_dim) -> (seq_len, embed_dim)
+                output_i = output_i.transpose(1, 2).reshape(-1, self.embed_dim)
+                outputs.append(output_i)
+            attn_output = torch.cat(outputs, dim=0)
+
         attn_output = self.out_proj(attn_output)
         return attn_output
 

@@ -1,0 +1,16 @@
+[
+  {
+    "id": "sample_001",
+    "image": "sample_small.png",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<image>\nWhat do you see in this image?"
+      },
+      {
+        "from": "gpt",
+        "value": "I can see a mathematical diagram with various equations and figures. This appears to be an educational or instructional material related to mathematics."
+      }
+    ]
+  }
+]

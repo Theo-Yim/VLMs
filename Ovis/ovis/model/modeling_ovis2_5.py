@@ -1,11 +1,10 @@
 import math
 from typing import Dict, List, Optional, Tuple, Union
 
-import PIL.Image
 import numpy as np
+import PIL.Image
 import torch
-from flash_attn import flash_attn_varlen_func
-from flash_attn.layers.rotary import apply_rotary_emb
+from tokenizers.implementations import ByteLevelBPETokenizer
 from torch import Tensor, nn
 from torch.nn import functional as F
 from transformers import (
@@ -15,13 +14,18 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
 )
-from tokenizers.implementations import ByteLevelBPETokenizer
 from transformers.activations import ACT2FN
 from transformers.generation.utils import GenerateOutput
 from transformers.modeling_outputs import BaseModelOutputWithNoAttention
 from transformers.modeling_utils import PreTrainedModel
+from transformers.utils import is_flash_attn_2_available
 
-from ovis.model.configuration_ovis2_5 import Siglip2NavitConfig, Ovis2_5_Config
+from ovis.model.configuration_ovis2_5 import Ovis2_5_Config, Siglip2NavitConfig
+
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_varlen_func
+    from flash_attn.layers.rotary import apply_rotary_emb
+
 
 IMAGE_PLACEHOLDER = "<image>"
 IMAGE_PLACEHOLDER_ID = -200
@@ -30,6 +34,7 @@ VIDEO_PLACEHOLDER_ID = -201
 
 VISUAL_ATOM_ID = -300
 INDICATOR_IDS = [-301, -302, -303, -304]
+
 
 # copied from qwen2.5-vl
 class VisionRotaryEmbedding(nn.Module):
@@ -87,7 +92,6 @@ class Siglip2VisionEmbeddings(nn.Module):
     ) -> torch.Tensor:
         """
         Resize positional embeddings to image-specific size and pad to a fixed size.
-
         Args:
             positional_embeddings (`torch.Tensor`):
                 Position embeddings of shape (height, width, embed_dim)
@@ -95,7 +99,6 @@ class Siglip2VisionEmbeddings(nn.Module):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
             max_length (`int`):
                 Maximum length of the positional embeddings to pad resized positional embeddings to
-
         Returns:
             `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
         """
@@ -179,7 +182,6 @@ class Siglip2VisionEmbeddings(nn.Module):
                 pos_embed_new[cnt:cnt + thw] = pe
                 cnt += thw
             patch_embeds = patch_embeds + pos_embed_new
-
         return patch_embeds
 
 
@@ -191,6 +193,28 @@ def apply_rotary_pos_emb_flashatt(
     sin = sin.chunk(2, dim=-1)[0].contiguous()
     q_embed = apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
     k_embed = apply_rotary_emb(k.float(), cos.float(), sin.float()).type_as(k)
+    return q_embed, k_embed
+
+
+# Copied from transformers.models.llama.modeling_llama.rotate_half
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
     return q_embed, k_embed
 
 
@@ -239,14 +263,41 @@ class Siglip2Attention(nn.Module):
 
         if self.use_rope:
             cos, sin = position_embeddings
-            queries, keys = apply_rotary_pos_emb_flashatt(queries.unsqueeze(0), keys.unsqueeze(0), cos, sin)
+            if is_flash_attn_2_available():
+                queries, keys = apply_rotary_pos_emb_flashatt(queries.unsqueeze(0), keys.unsqueeze(0), cos, sin)
+            else:
+                queries, keys = apply_rotary_pos_emb_vision(queries.unsqueeze(0), keys.unsqueeze(0), cos, sin)
             queries = queries.squeeze(0)
             keys = keys.squeeze(0)
 
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-        attn_output = flash_attn_varlen_func(queries, keys, values, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
-                                            seq_length, -1
-                                        )
+        if is_flash_attn_2_available():
+            attn_output = flash_attn_varlen_func(queries, keys, values, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
+                                                seq_length, -1
+                                            )
+        else:
+            batch_size = cu_seqlens.shape[0] - 1
+            outputs = []
+            cu = cu_seqlens.tolist()
+            for i in range(batch_size):
+                start_idx = cu[i]
+                end_idx = cu[i + 1]
+                # Each sequence is processed independently.
+                q_i = queries[start_idx:end_idx].unsqueeze(0)
+                k_i = keys[start_idx:end_idx].unsqueeze(0)
+                v_i = values[start_idx:end_idx].unsqueeze(0)
+                # (1, seq_len, num_heads, head_dim) ->
+                # (1, num_heads, seq_len, head_dim)
+                q_i, k_i, v_i = [x.transpose(1, 2) for x in (q_i, k_i, v_i)]
+                output_i = F.scaled_dot_product_attention(q_i,
+                                                        k_i,
+                                                        v_i,
+                                                        dropout_p=0.0)
+                # (1, num_heads, seq_len, head_dim) -> (seq_len, embed_dim)
+                output_i = output_i.transpose(1, 2).reshape(-1, self.embed_dim)
+                outputs.append(output_i)
+            attn_output = torch.cat(outputs, dim=0)
+
         attn_output = self.out_proj(attn_output)
         return attn_output
 
@@ -311,7 +362,6 @@ class Siglip2Encoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`Siglip2EncoderLayer`].
-
     Args:
         config: Siglip2NavitConfig
     """
@@ -416,10 +466,8 @@ class Siglip2Encoder(nn.Module):
                 than the model's internal embedding lookup matrix.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
-
                 [What are attention masks?](../glossary#attention-mask)
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -508,6 +556,7 @@ class Siglip2VisionTransformer(nn.Module):
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
         """
+        print("test forward in Siglip2VisionTransformer")
         # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         # output_hidden_states = (
         #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -517,7 +566,7 @@ class Siglip2VisionTransformer(nn.Module):
 
         last_hidden_state, hidden_states = self.encoder(hidden_states, grid_thws, output_hidden_states)
         last_hidden_state = self.post_layernorm(last_hidden_state)
-
+        print("test forward end in Siglip2VisionTransformer")
         if not return_dict:
             output = (last_hidden_state,)
             output += (hidden_states,) if output_hidden_states else ()
@@ -657,6 +706,7 @@ class VisualTokenizer(torch.nn.Module):
         min_pixels: Optional[int] = None,
         max_pixels: Optional[int] = None
     ):
+        print("test preprocess in VisualTokenizer")
         patch_size = self.vit.config.patch_size
         temporal_patch_size = self.vit.config.temporal_patch_size
         hidden_stride = self.vit.config.hidden_stride
@@ -686,8 +736,8 @@ class VisualTokenizer(torch.nn.Module):
             patches = np.concatenate([patches, repeats], axis=0)
         channel = patches.shape[1]
         grid_t = patches.shape[0] // temporal_patch_size
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        grid_thw = torch.tensor([[grid_t, grid_h, grid_w]])
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size  # 800//16=50, 864//16=54
+        grid_thw = torch.tensor([[grid_t, grid_h, grid_w]]) # 1, 50, 54
 
         patches = patches.reshape(
             grid_t, temporal_patch_size, channel,
@@ -697,7 +747,7 @@ class VisualTokenizer(torch.nn.Module):
         patches = patches.transpose(0, 3, 6, 4, 7, 2, 1, 5, 8)
         flatten_patches = patches.reshape(
             grid_t * grid_h * grid_w, channel * temporal_patch_size * patch_size * patch_size
-        )
+        ) # (50*16 * 54*16 * 3) <- 1x50x54, 3x1x16x16
         flatten_patches = torch.tensor(flatten_patches)
 
         return flatten_patches, grid_thw
@@ -732,8 +782,7 @@ class Ovis2_5(OvisPreTrainedModel):
 
         self.llm = AutoModelForCausalLM.from_config(self.config.llm_config)
         assert self.config.hidden_size == self.llm.config.hidden_size, "hidden size mismatch"
-        # self.text_tokenizer = AutoTokenizer.from_pretrained(self.config.name_or_path)
-        self.text_tokenizer = ByteLevelBPETokenizer(vocab="./Ovis/HF_Repo/vocab.json", merges="./Ovis/HF_Repo/merges.txt")
+        self.text_tokenizer = AutoTokenizer.from_pretrained(self.config.name_or_path)
         self.visual_tokenizer = VisualTokenizer(vit=AutoModel.from_config(self.config.vit_config),
                                                 visual_vocab_size=self.config.visual_vocab_size,
                                                 image_processor_name_or_path=self.config.name_or_path)

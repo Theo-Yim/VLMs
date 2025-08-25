@@ -1,0 +1,43 @@
+[
+  {
+    "id": "sample_001",
+    "image": "sample_small.png",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<image>\nWhat do you see in this image?"
+      },
+      {
+        "from": "gpt",
+        "value": "I can see a mathematical diagram with various equations and figures. This appears to be an educational or instructional material related to mathematics."
+      }
+    ]
+  },
+  {
+    "id": "sample_002_thinking",
+    "image": "sample_small.png",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "<image>\nAnalyze this mathematical content step by step."
+      },
+      {
+        "from": "gpt",
+        "value": "<think>\nLet me examine this image carefully to identify the mathematical elements present.\n\nI can see several components:\n1. There appear to be equations\n2. There are geometric figures\n3. There are numbered sections or parts\n\nI should provide a systematic analysis of each element.\n</think>\n\nLooking at this mathematical content, I can identify several key elements:\n\n1. **Equations**: There are various mathematical equations displayed\n2. **Geometric figures**: I can see geometric shapes and diagrams\n3. **Structured layout**: The content is organized in a clear, educational format\n\nThis appears to be instructional material designed to teach mathematical concepts through visual representation."
+      }
+    ]
+  },
+  {
+    "id": "sample_003_text_only",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Explain the importance of multimodal AI models."
+      },
+      {
+        "from": "gpt",
+        "value": "Multimodal AI models are crucial because they can understand and process multiple types of information simultaneously - text, images, audio, and video. This makes them more versatile and capable of handling real-world tasks that often involve multiple data types."
+      }
+    ]
+  }
+]

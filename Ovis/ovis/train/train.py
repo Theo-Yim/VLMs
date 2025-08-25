@@ -3,7 +3,11 @@ import os
 import pathlib
 
 import deepspeed
-import flash_attn
+try:
+    import flash_attn
+    HAS_FLASH_ATTN = True
+except ImportError:
+    HAS_FLASH_ATTN = False
 import torch
 import transformers
 from deepspeed import get_accelerator
@@ -29,8 +33,11 @@ def load_model(model_args: ModelArguments, training_args: TrainingArguments):
     
     model, loading_info = Ovis2_5.from_pretrained(
         training_args.ovis_pretrained_path,
+        # torch_dtype=torch.bfloat16,
         output_loading_info=True,
-        trust_remote_code=True
+        trust_remote_code=True,
+        # attn_implementation="flash_attention_2" if HAS_FLASH_ATTN else "eager",
+        # device_map={"vte": 1, "visual_tokenizer": 1, "llm": 0},
     )
     rankN_print(BEGIN_LINE)
     rankN_print(f'Loading info of Ovis:\n{loading_info}')
