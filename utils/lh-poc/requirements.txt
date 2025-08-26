@@ -1,0 +1,5 @@
+git+https://github.com/huggingface/transformers@f3f6c86582611976e72be054675e2bf0abb5f775
+accelerate
+qwen-vl-utils
+vllm>0.7.2
+sentence-transformers

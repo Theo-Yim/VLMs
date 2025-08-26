@@ -1,5 +1,5 @@
 """
-Ovis2.5 Fine-tuning Script
+Ovis2.5 Fine-tuning Script using TRL SFTTrainer
 Based on original Ovis training framework with custom modeling implementation
 """
 
@@ -12,17 +12,18 @@ import torch
 
 # Import custom Ovis2.5 implementation
 from ovis.model.modeling_ovis2_5 import Ovis2_5
-from ovis.train.arguments import TrainingArguments as OvisTrainingArguments
+# from ovis.train.arguments import TrainingArguments as OvisTrainingArguments
 
 # Import original Ovis training components
 from ovis.train.dataset.conversation_dataset import ConversationDataset
 from ovis.train.dataset.multimodal_dataset import DataCollatorForMultimodalDataset
 from transformers import (
     HfArgumentParser,
-    Trainer,
     set_seed,
 )
-# from trl import SFTConfig, SFTTrainer
+
+# Import TRL components
+from trl import SFTConfig, SFTTrainer
 
 try:
     import flash_attn
@@ -31,9 +32,6 @@ try:
 except ImportError:
     HAS_FLASH_ATTN = False
 
-# Import constants from the model
-# from ovis.utils.constants import INDICATOR_IDS, VISUAL_ATOM_ID
-
 
 @dataclass
 class ModelArguments:
@@ -41,13 +39,13 @@ class ModelArguments:
 
     model_path: str = field(default="AIDC-AI/Ovis2.5-9B")
     visual_vocab_size: int = field(default=65536)
-    # attn_implementation: Optional[str] = field(default="flash_attention_2")
 
 
 @dataclass
-class CustomTrainingArguments(OvisTrainingArguments):
-    """Extended training arguments for Ovis2.5 based on original Ovis arguments"""
+class CustomSFTConfig(SFTConfig):
+    """Extended SFT configuration for Ovis2.5 based on TRL SFTConfig"""
 
+    # Ovis-specific arguments
     train_modules: str = field(default="all")  # all, llm, visual_tokenizer, vte, etc.
     freeze_vision_tower: bool = field(default=False)
     freeze_llm: bool = field(default=False)
@@ -59,11 +57,44 @@ class CustomTrainingArguments(OvisTrainingArguments):
     # Data paths
     data_path: str = field(default="./data/train_data.json")
     image_folder: str = field(default="./data/images")
+    data_name: str = field(default="test_dataset")
+    data_type: str = field(default="conversation")
 
+    # Multimodal-specific parameters (from original Ovis training args)
+    multimodal_max_length: int = field(default=8192)
+    text_max_length: Optional[int] = field(default=4096)
+    single_image_min_pixels: int = field(default=448 * 448)
+    single_image_max_pixels: int = field(default=1792 * 1792)
+    multiple_image_min_pixels: int = field(default=448 * 448)
+    multiple_image_max_pixels: int = field(default=896 * 896)
+    video_min_pixels: int = field(default=448 * 448)
+    video_max_pixels: int = field(default=896 * 896)
+    min_frames: int = field(default=8)
+    max_frames: int = field(default=8)
+
+    # GPU distribution
     distribute_gpus: bool = field(default=False)
 
+    # SFT-specific parameters (correct placement)
+    packing: bool = field(default=False)  # Set to False for multimodal data
+    max_seq_length: Optional[int] = field(
+        default=8192
+    )  # Controls sequence length TODO Check if it is needed
+    dataset_text_field: Optional[str] = field(default=None)  # For text-only datasets
+    formatting_func: Optional[str] = field(default=None)  # Alternative to dataset_text_field
 
-def create_dataset_info(training_args: CustomTrainingArguments) -> Dict[str, Dict]:
+    def __post_init__(self):
+        super().__post_init__()
+        # Sync max_seq_length with multimodal_max_length
+        if self.max_seq_length != self.multimodal_max_length:
+            self.max_seq_length = self.multimodal_max_length
+
+        # For custom multimodal datasets, we need these settings
+        self.remove_unused_columns = False  # Important for multimodal data
+        self.dataset_kwargs = {"skip_prepare_dataset": True}  # Skip default text processing
+
+
+def create_dataset_info(training_args: CustomSFTConfig) -> Dict[str, Dict]:
     """Create dataset info structure expected by original ConversationDataset"""
     return {
         training_args.data_name: {
@@ -75,50 +106,23 @@ def create_dataset_info(training_args: CustomTrainingArguments) -> Dict[str, Dic
     }
 
 
-# def create_device_map(gpu_ids):
-#     """
-#     Create device map for Ovis2_5 model components across multiple GPUs.
-#     Args:
-#         gpu_ids: List of GPU IDs to use
-#     Returns:
-#         device_map: Dictionary mapping model components to GPUs
-#     """
-#     if len(gpu_ids) < 2:
-#         return f"cuda:{gpu_ids[0]}"
-#     # id 0: Vision components (vte, visual_tokenizer)
-#     # id 1~: LLM components (llm)
-#     device_map = {"vte": gpu_ids[0], "visual_tokenizer": gpu_ids[0]}
-#     if len(gpu_ids) < 3:
-#         device_map["llm"] = gpu_ids[1]
-#     else:
-#         device_map["llm"] = gpu_ids[1]
-#         # TODO: For 3+ GPUs, we should distribute LLM layers further
-#     return device_map
-
-
 def split_ovis25_model():
     """
     Create device mapping for Ovis2.5 model to efficiently distribute across multiple GPUs.
-    Architecture:
-    - Visual processing: ViT (27 layers) + visual tokenizer head + VTE
-    - LLM: Qwen3-8B (36 layers) + embeddings + norm + lm_head
-    Data flow: Images -> ViT -> visual_head -> VTE -> merge with text embeddings -> LLM layers -> output
     """
     device_map = {}
     world_size = torch.cuda.device_count()
     if world_size < 2:
-        # Single GPU - put everything on GPU 0
         return "auto"
-    # Load config to get layer counts
-    llm_layers = 36  # config.llm_config.num_hidden_layers  # 36 for Qwen3-8B
-    device_map["visual_tokenizer.vit"] = 0  # Entire SigLIP ViT (27 layers)
+
+    llm_layers = 36  # Qwen3-8B layers
+
+    device_map["visual_tokenizer.vit"] = 0  # Entire SigLIP ViT
     device_map["visual_tokenizer.head"] = 0  # Visual projection head
     device_map["vte"] = 0  # Visual token embeddings
-    device_map["llm.model.embed_tokens"] = 0  # Text embeddings (need to merge with visual)
-    # Distribute LLM layers across available GPUs
+    device_map["llm.model.embed_tokens"] = 0  # Text embeddings
+
     if world_size == 2:
-        # GPU 0: Vision + embeddings + first few LLM layers
-        # GPU 1: Remaining LLM layers + norm + lm_head
         layers_gpu0 = 8  # Keep some LLM layers with embeddings
         for i in range(layers_gpu0):
             device_map[f"llm.model.layers.{i}"] = 0
@@ -127,7 +131,7 @@ def split_ovis25_model():
         device_map["llm.model.norm"] = 1
         device_map["llm.lm_head"] = 1
     elif world_size == 3:
-        layers_per_gpu = [10, 13, 13]  # Slightly front-loaded due to vision processing
+        layers_per_gpu = [10, 13, 13]
         layer_cnt = 0
         for gpu_id, num_layers in enumerate(layers_per_gpu):
             for i in range(num_layers):
@@ -136,8 +140,7 @@ def split_ovis25_model():
         device_map["llm.model.norm"] = 2
         device_map["llm.lm_head"] = 2
     else:  # world_size >= 4
-        # Reserve some layers for GPU 0 (vision processing) and last GPU (output)
-        layers_gpu0 = max(4, llm_layers // (world_size + 1))  # Front-load slightly
+        layers_gpu0 = max(4, llm_layers // (world_size + 1))
         layers_last_gpu = max(4, llm_layers // (world_size + 1))
         remaining_layers = llm_layers - layers_gpu0 - layers_last_gpu
         middle_gpus = world_size - 2
@@ -148,25 +151,26 @@ def split_ovis25_model():
             layers_per_middle_gpu = 0
             extra_layers = 0
             layers_last_gpu += remaining_layers
-        # GPU 0: First layers
+
         for i in range(layers_gpu0):
             device_map[f"llm.model.layers.{i}"] = 0
-        # Middle GPUs: Distribute remaining layers
+
         layer_cnt = layers_gpu0
         for gpu_id in range(1, world_size - 1):
             num_layers = layers_per_middle_gpu + (1 if gpu_id - 1 < extra_layers else 0)
             for i in range(num_layers):
                 device_map[f"llm.model.layers.{layer_cnt}"] = gpu_id
                 layer_cnt += 1
-        # Last GPU: Final layers + norm + lm_head
+
         for i in range(layer_cnt, llm_layers):
             device_map[f"llm.model.layers.{i}"] = world_size - 1
         device_map["llm.model.norm"] = world_size - 1
         device_map["llm.lm_head"] = world_size - 1
+
     return device_map
 
 
-def setup_model_for_training(model: Ovis2_5, training_args: CustomTrainingArguments):
+def setup_model_for_training(model: Ovis2_5, training_args: CustomSFTConfig):
     """Setup model parameters for training"""
 
     # Freeze everything first
@@ -202,14 +206,14 @@ def setup_model_for_training(model: Ovis2_5, training_args: CustomTrainingArgume
 
 
 def main():
-    """Main training function"""
+    """Main training function using TRL SFTTrainer"""
 
     config_file = (
         os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else "./Ovis/src_theo/train_config.json"
     )
 
     # Parse arguments
-    parser = HfArgumentParser((ModelArguments, CustomTrainingArguments))
+    parser = HfArgumentParser((ModelArguments, CustomSFTConfig))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         model_args, training_args = parser.parse_json_file(
             json_file=config_file, allow_extra_keys=True
@@ -223,7 +227,7 @@ def main():
     # Create device map for multi-GPU distribution
     device_map = None
     if training_args.distribute_gpus:
-        device_map = split_ovis25_model()  # create_device_map(training_args.gpu_ids)
+        device_map = split_ovis25_model()
     else:
         device_map = (
             f"cuda:{training_args.local_rank}" if training_args.local_rank != -1 else "cuda:0"
@@ -235,7 +239,6 @@ def main():
         model_args.model_path,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
-        # attn_implementation="flash_attention_2" if HAS_FLASH_ATTN else "eager",
         device_map=device_map,
     )
 
@@ -259,20 +262,22 @@ def main():
         training_args=training_args,
     )
 
-    # Use original data collator
+    # Use original data collator (SFTTrainer can work with custom data collators)
     data_collator = DataCollatorForMultimodalDataset(model.text_tokenizer)
 
-    # Initialize trainer
-    # trainer = SFTTrainer(
-    trainer = Trainer(
+    # Initialize SFTTrainer with correct parameters
+    print("Initializing SFTTrainer...")
+    trainer = SFTTrainer(
         model=model,
-        args=training_args,
+        args=training_args,  # SFTConfig containing all training parameters
         train_dataset=train_dataset,
         data_collator=data_collator,
+        # Note: tokenizer, packing, max_seq_length are handled by the SFTConfig
+        # processing_class can be added if needed for multimodal processing
     )
 
     # Training
-    print("Starting training...")
+    print("Starting SFT training...")
     trainer.train()
 
     # Save model
@@ -280,7 +285,7 @@ def main():
     trainer.save_model()
     trainer.save_state()
 
-    print("Training completed!")
+    print("SFT training completed!")
 
 
 if __name__ == "__main__":
