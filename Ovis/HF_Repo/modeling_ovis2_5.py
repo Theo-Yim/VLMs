@@ -182,7 +182,6 @@ class Siglip2VisionEmbeddings(nn.Module):
                 pos_embed_new[cnt:cnt + thw] = pe
                 cnt += thw
             patch_embeds = patch_embeds + pos_embed_new
-
         return patch_embeds
 
 
@@ -566,7 +565,6 @@ class Siglip2VisionTransformer(nn.Module):
 
         last_hidden_state, hidden_states = self.encoder(hidden_states, grid_thws, output_hidden_states)
         last_hidden_state = self.post_layernorm(last_hidden_state)
-
         if not return_dict:
             output = (last_hidden_state,)
             output += (hidden_states,) if output_hidden_states else ()
@@ -786,8 +784,8 @@ class Ovis2_5(OvisPreTrainedModel):
                                                 visual_vocab_size=self.config.visual_vocab_size,
                                                 image_processor_name_or_path=self.config.name_or_path)
 
-        self.vte = VisualEmbedding(self.config.visual_vocab_size, self.config.hidden_size,
-                                   device=self.visual_tokenizer.vit.device, dtype=self.visual_tokenizer.vit.dtype)
+        self.vte = VisualEmbedding(self.config.visual_vocab_size, self.config.hidden_size) # ,
+        #                            device=self.visual_tokenizer.vit.device, dtype=self.visual_tokenizer.vit.dtype)
         indicator_token_indices = torch.arange(
             self.config.visual_vocab_size - len(INDICATOR_IDS),
             self.config.visual_vocab_size,

@@ -556,7 +556,6 @@ class Siglip2VisionTransformer(nn.Module):
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
         """
-        print("test forward in Siglip2VisionTransformer")
         # output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         # output_hidden_states = (
         #     output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -566,7 +565,6 @@ class Siglip2VisionTransformer(nn.Module):
 
         last_hidden_state, hidden_states = self.encoder(hidden_states, grid_thws, output_hidden_states)
         last_hidden_state = self.post_layernorm(last_hidden_state)
-        print("test forward end in Siglip2VisionTransformer")
         if not return_dict:
             output = (last_hidden_state,)
             output += (hidden_states,) if output_hidden_states else ()
@@ -706,7 +704,6 @@ class VisualTokenizer(torch.nn.Module):
         min_pixels: Optional[int] = None,
         max_pixels: Optional[int] = None
     ):
-        print("test preprocess in VisualTokenizer")
         patch_size = self.vit.config.patch_size
         temporal_patch_size = self.vit.config.temporal_patch_size
         hidden_stride = self.vit.config.hidden_stride
@@ -736,8 +733,8 @@ class VisualTokenizer(torch.nn.Module):
             patches = np.concatenate([patches, repeats], axis=0)
         channel = patches.shape[1]
         grid_t = patches.shape[0] // temporal_patch_size
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size  # 800//16=50, 864//16=54
-        grid_thw = torch.tensor([[grid_t, grid_h, grid_w]]) # 1, 50, 54
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_thw = torch.tensor([[grid_t, grid_h, grid_w]])
 
         patches = patches.reshape(
             grid_t, temporal_patch_size, channel,
@@ -747,7 +744,7 @@ class VisualTokenizer(torch.nn.Module):
         patches = patches.transpose(0, 3, 6, 4, 7, 2, 1, 5, 8)
         flatten_patches = patches.reshape(
             grid_t * grid_h * grid_w, channel * temporal_patch_size * patch_size * patch_size
-        ) # (50*16 * 54*16 * 3) <- 1x50x54, 3x1x16x16
+        )
         flatten_patches = torch.tensor(flatten_patches)
 
         return flatten_patches, grid_thw
@@ -787,8 +784,8 @@ class Ovis2_5(OvisPreTrainedModel):
                                                 visual_vocab_size=self.config.visual_vocab_size,
                                                 image_processor_name_or_path=self.config.name_or_path)
 
-        self.vte = VisualEmbedding(self.config.visual_vocab_size, self.config.hidden_size,
-                                   device=self.visual_tokenizer.vit.device, dtype=self.visual_tokenizer.vit.dtype)
+        self.vte = VisualEmbedding(self.config.visual_vocab_size, self.config.hidden_size) # ,
+        #                            device=self.visual_tokenizer.vit.device, dtype=self.visual_tokenizer.vit.dtype)
         indicator_token_indices = torch.arange(
             self.config.visual_vocab_size - len(INDICATOR_IDS),
             self.config.visual_vocab_size,
