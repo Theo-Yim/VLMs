@@ -193,8 +193,9 @@ class LHDataLoader:
 def main():
     """사용 예시"""
     # 데이터 경로 설정
-    data_root = "/mnt/nas2/users/sbchoi/kh-practices/lh-poc/lh-data/K-LH-302 2025-08-22 155843_export"
-    image_root = "/mnt/nas2/users/sbchoi/kh-practices/lh-poc/lh-data-image/image/20250722"
+    parent_path = "/mnt/nas1/data/lh-poc"
+    data_root = os.path.join(parent_path, "lh-data/K-LH-302 2025-08-22 155843_export")  
+    image_root = os.path.join(parent_path, "lh-data-image/image/20250722")
     
     # 데이터로더 생성
     loader = LHDataLoader(data_root, image_root)

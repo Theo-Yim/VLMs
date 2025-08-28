@@ -3,3 +3,4 @@ accelerate
 qwen-vl-utils
 vllm>0.7.2
 sentence-transformers
+superb-ai-label
