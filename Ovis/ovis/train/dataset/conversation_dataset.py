@@ -70,14 +70,30 @@ class ConversationDataset(MultimodalDataset):
         # 1. conversations → messages 변환
         messages, has_think_tag = self._convert_conversations_to_messages(conversations, images, videos)
         
-        # 2. Ovis2.5 preprocess_inputs 호출 (labels 없이)
+        # 2. Ovis2.5 preprocess_inputs 호출 - user message만으로 prompt 생성
+        user_messages = [msg for msg in messages if msg["role"] == "user"]
+        assistant_messages = [msg for msg in messages if msg["role"] == "assistant"]
+        
+        # User prompt 생성 (add_generation_prompt=True로 <|im_start|>assistant 추가)
         input_ids, pixel_values, grid_thws = self.model.preprocess_inputs(
-            messages=messages,
+            messages=user_messages,
             min_pixels=min_pixels,
             max_pixels=max_pixels,
-            add_generation_prompt=False,  # assistant 메시지 이미 포함되어 있음
+            add_generation_prompt=True,
             enable_thinking=has_think_tag
         )
+        
+        # Assistant 응답 수동으로 추가
+        if assistant_messages:
+            assistant_text = assistant_messages[0]["content"][0]["text"]
+            assistant_tokens = self.text_tokenizer.encode(assistant_text, add_special_tokens=False)
+            im_end_tokens = self.text_tokenizer.encode("<|im_end|>", add_special_tokens=False)
+            
+            # input_ids에 assistant 내용과 im_end 추가
+            input_ids_list = input_ids[0].tolist()
+            input_ids_list.extend(assistant_tokens)
+            input_ids_list.extend(im_end_tokens)
+            input_ids = torch.tensor(input_ids_list, dtype=torch.long).unsqueeze(0)
         
         # 3. Labels 생성
         labels = self._generate_labels(input_ids, messages)

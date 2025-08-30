@@ -830,6 +830,8 @@ class Ovis2_5(OvisPreTrainedModel, GenerationMixin):
             pixel_values=pixel_values,
             grid_thws=grid_thws,
         )
+        # Remove inputs_embeds from kwargs to avoid duplicate argument error
+        kwargs.pop('inputs_embeds', None)
         return self.llm(inputs_embeds=inputs_embeds, attention_mask=attention_mask, labels=labels, **kwargs)
 
     def merge_multimodal(
@@ -848,9 +850,27 @@ class Ovis2_5(OvisPreTrainedModel, GenerationMixin):
             visual_tokens = self.visual_tokenizer(pixel_values, grid_thws)
             visual_embeds = self.vte(visual_tokens).to(dtype=multimodal_embeds.dtype, device=multimodal_embeds.device)
 
+            # Use non-in-place operations to avoid gradient computation issues with LoRA
             for i, indicator_id in enumerate(INDICATOR_IDS):
-                multimodal_embeds[input_ids == indicator_id] = visual_indicator_embeds[i]
-            multimodal_embeds[input_ids == VISUAL_ATOM_ID] = visual_embeds
+                mask = input_ids == indicator_id
+                multimodal_embeds = torch.where(
+                    mask.unsqueeze(-1).expand(-1, -1, multimodal_embeds.size(-1)),
+                    visual_indicator_embeds[i].unsqueeze(0).unsqueeze(0).expand_as(multimodal_embeds),
+                    multimodal_embeds
+                )
+            
+            # Replace visual atom tokens with visual embeddings
+            visual_mask = input_ids == VISUAL_ATOM_ID
+            if visual_mask.any():
+                # Create a clone to avoid in-place operations
+                result_embeds = multimodal_embeds.clone()
+                visual_positions = torch.nonzero(visual_mask, as_tuple=False)
+                
+                # Replace positions with visual embeddings
+                for idx, (batch_idx, seq_idx) in enumerate(visual_positions):
+                    if idx < visual_embeds.size(0):
+                        result_embeds[batch_idx, seq_idx] = visual_embeds[idx]
+                multimodal_embeds = result_embeds
 
         return multimodal_embeds
 

@@ -158,8 +158,7 @@ class DataCollatorForMultimodalDataset:
             padding_value=self.text_tokenizer.pad_token_id
         )
         pixel_values = [x for x in pixel_values if x is not None]
-        # pixel_values = torch.cat(pixel_values, dim=0) if len(pixel_values) > 0 else None
-        pixel_values = torch.stack(pixel_values, dim=0) if len(pixel_values) > 0 else None
+        pixel_values = torch.cat(pixel_values, dim=0) if len(pixel_values) > 0 else None
         grid_thws = [x for x in grid_thws if x is not None]
         grid_thws = torch.cat(grid_thws, dim=0) if len(grid_thws) > 0 else None
         attention_mask = torch.nn.utils.rnn.pad_sequence(
