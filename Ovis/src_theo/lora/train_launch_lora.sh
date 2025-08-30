@@ -1,23 +1,29 @@
 #!/bin/bash
 
 # Ovis2.5 LoRA Fine-tuning Launch Script
-# Usage: ./train_launch_lora.sh [config_file]
+# Usage: ./train_launch_lora.sh [config_file] [num_gpus]
+
+export PYTHONPATH=/workspace/VLMs/Ovis:$PYTHONPATH
 
 set -e
 
 # Default config file
 CONFIG_FILE=${1:-"./Ovis/src_theo/lora/train_config_lora.json"}
 
+# Default number of GPUs (can be overridden)
+NUM_GPUS=${2:-1}
+
 # Check if config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: Configuration file '$CONFIG_FILE' not found!"
     echo "Please create a configuration file or specify an existing one."
-    echo "Usage: $0 [config_file]"
+    echo "Usage: $0 [config_file] [num_gpus]"
     exit 1
 fi
 
 echo "=== Ovis2.5 LoRA Fine-tuning ==="
 echo "Config file: $CONFIG_FILE"
+echo "Number of GPUs: $NUM_GPUS"
 echo "=========================="
 
 # Check GPU availability
@@ -25,6 +31,14 @@ if command -v nvidia-smi &> /dev/null; then
     echo "GPU Status:"
     nvidia-smi --query-gpu=index,name,memory.total,memory.free --format=csv,noheader,nounits
     echo "=========================="
+    
+    # Check if requested number of GPUs is available
+    available_gpus=$(nvidia-smi --list-gpus | wc -l)
+    if [ "$NUM_GPUS" -gt "$available_gpus" ]; then
+        echo "Warning: Requested $NUM_GPUS GPUs but only $available_gpus are available."
+        echo "Using $available_gpus GPUs instead."
+        NUM_GPUS=$available_gpus
+    fi
 fi
 
 # Set CUDA optimizations
@@ -38,9 +52,15 @@ python -c "import trl, peft" 2>/dev/null || {
     pip install trl peft
 }
 
-# Run LoRA training
-echo "Starting LoRA training..."
-python ./Ovis/src_theo/lora/train_theo_lora.py "$CONFIG_FILE"
+# Run LoRA training with torchrun for multi-GPU support
+echo "Starting LoRA training with $NUM_GPUS GPU(s)..."
+if [ "$NUM_GPUS" -eq 1 ]; then
+    # Single GPU - use direct Python call
+    python ./Ovis/src_theo/lora/train_theo_lora.py "$CONFIG_FILE"
+else
+    # Multi-GPU - use torchrun
+    torchrun --nproc_per_node=$NUM_GPUS ./Ovis/src_theo/lora/train_theo_lora.py "$CONFIG_FILE"
+fi
 
 echo "LoRA training completed!"
 echo ""

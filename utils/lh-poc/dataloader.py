@@ -244,8 +244,6 @@ def main():
                     obj = label_data['objects'][0]
                     print(f"첫 번째 객체 클래스: {obj.get('class_name', 'N/A')}")
             index += 1
-            if index > 10:
-                break
     
     # 특정 라벨 ID로 검색 예시
     if len(loader) > 0:

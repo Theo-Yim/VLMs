@@ -13,6 +13,7 @@ from transformers import (
     AutoModel,
     AutoModelForCausalLM,
     AutoTokenizer,
+    GenerationMixin,
 )
 from transformers.activations import ACT2FN
 from transformers.generation.utils import GenerateOutput
@@ -771,7 +772,7 @@ class OvisPreTrainedModel(PreTrainedModel):
     base_model_prefix = "ovis2_5"
 
 
-class Ovis2_5(OvisPreTrainedModel):
+class Ovis2_5(OvisPreTrainedModel, GenerationMixin):
     _supports_flash_attn_2 = True
 
     def __init__(self, config: Ovis2_5_Config, *inputs, **kwargs):
@@ -807,6 +808,7 @@ class Ovis2_5(OvisPreTrainedModel):
             (self.llm._keep_in_fp32_modules, self.visual_tokenizer.vit._keep_in_fp32_modules))
         self.is_parallelizable = all((self.llm.is_parallelizable, self.visual_tokenizer.vit.is_parallelizable))
         self.supports_gradient_checkpointing = True
+        self.tie_weights()
 
     def tie_weights(self):
         self.llm.tie_weights()
@@ -989,6 +991,40 @@ class Ovis2_5(OvisPreTrainedModel):
             generated_ids = self.llm.generate(inputs=None, inputs_embeds=inputs_embeds, attention_mask=attention_mask, **kwargs)
             kwargs['streamer'].manual_end() if 'streamer' in kwargs else None
             return generated_ids
+
+    def get_input_embeddings(self):
+        """Standard transformers interface - delegates to LLM"""
+        return self.llm.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        """Standard transformers interface - delegates to LLM"""
+        self.llm.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        """Standard transformers interface - delegates to LLM"""
+        return self.llm.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        """Standard transformers interface - delegates to LLM"""
+        self.llm.set_output_embeddings(new_embeddings)
+
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        """Prepare inputs for generation - delegates to LLM"""
+        # Handle multimodal inputs
+        if "pixel_values" in kwargs or "grid_thws" in kwargs:
+            # For multimodal generation, merge inputs first
+            inputs_embeds = self.merge_multimodal(
+                input_ids=input_ids,
+                pixel_values=kwargs.pop("pixel_values", None),
+                grid_thws=kwargs.pop("grid_thws", None)
+            )
+            # Replace input_ids with inputs_embeds
+            kwargs["inputs_embeds"] = inputs_embeds
+            kwargs.pop("input_ids", None)
+            return {"inputs_embeds": inputs_embeds, **kwargs}
+        else:
+            # Text-only generation, delegate to LLM
+            return self.llm.prepare_inputs_for_generation(input_ids, **kwargs)
 
 
 AutoConfig.register('siglip2_navit', Siglip2NavitConfig)

@@ -176,11 +176,18 @@ def main():
     
     # Load model
     print(f"Loading model from {model_args.model_path}...")
+    
+    # Handle device mapping for distributed training
+    device_map = (
+        f"cuda:{training_args.local_rank}" if training_args.local_rank != -1 else "cuda:0"
+    )
+    print(f"Using device map: {device_map}")
+    
     model = Ovis2_5.from_pretrained(
         model_args.model_path,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
-        device_map="auto",  # Let transformers handle device placement
+        device_map=device_map,
     )
     
     # Create LoRA configuration

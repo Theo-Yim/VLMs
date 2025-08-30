@@ -1,3 +1,210 @@
+prompt_inference = """## You are a professional house construction inspector. Your job is to examine the provided image and determine if there is any defect. You need to guess the space, defect type, defect description, material part, and location in the image of the image.
+
+You must output the answer in the json format with the following fields:
+- space: [Space name from the list of Spaces]
+- defect_present: Yes / No
+- If Yes, also include:
+  - defect_type: [type from the list of Defect Types]
+  - defect_description: [brief description of the defect]
+  - material_part: [material part from the list of Material Parts]
+  - location_in_image: [describe location within the image, if applicable]
+
+### Instructions
+- Carefully examine each part of the image.
+- Identify the space of the image.
+- Identify the material part of the image.
+- Identify the defect type of the image.
+- Identify the defect description of the image.
+- Identify the location in the image of the image.
+"""
+
+prompt_theo = """## Existing Labels
+{existing_labels}
+## You are performing "Multimodal Interleaved Reasoning". During the thinking process, keep an eye on the visual cues in the original image, identify the clue of physical defects which lead us to the conclusion of the Existing Label above. Output the thinking process within a pair of <T> </T> tags and then output the final answer within a pair of <A> </A> tags. Your thinking process inside <T> tags must logically lead to the answer output inside <A> tags. Do not explicitly mention any of the content or presence of the Existing Labels in your response nor inside <T> and </T>.
+
+Your output must start from the thinking process with a pair of <T> </T> tags.
+In the Answer section with a pair of <A> </A> tags, there should be a JSON list, where the json object is the defect information for each defect with the following fields:
+- space: [Space name from the list of Spaces]
+- defect_present: Yes / No
+- If Yes, also include:
+  - defect_type: [type from the list of Defect Types]
+  - defect_description: [brief description of the defect]
+  - material_part: [material part from the list of Material Parts]
+  - location_in_image: [describe location within the image, if applicable]
+
+### List of Spaces
+{spaces}
+
+### List of Defect Types
+{defect_types}
+
+### List of Material Parts
+{material_parts}
+"""
+
+spaces = """- Living Room
+- Bedroom
+- Alpha Room
+- Kitchen
+- Pantry
+- Utility Room
+- Bathroom
+- Laundry Room
+- Entrance
+- Vestibule
+- Entrance Storage
+- Hallway
+- Balcony
+- Outdoor Unit Room
+- Emergency Shelter
+- Dressing Room
+- Boiler Room
+- Exterior Wall
+"""
+
+defect_types = """- Painting defect
+- Opening/closing defect
+- Vertical/horizontal alignment defect
+- Locking defect
+- Peeling/delamination
+- Deterioration/aged
+- Discoloration
+- Sheet defect
+- Cover defect
+- Caulking defect
+- Corrosion/rust
+- Backflow
+- Handle defect
+- Gradient/slope defect
+- Adhesion defect
+- Inflow/infiltration
+- Omission/missing
+- Joint/grout separation
+- Detachment/replacement
+- Damage/breakage
+- Lifting/bulging
+- Insufficient pressurization
+- Tearing/rip
+- Oil leakage
+- Water leakage
+- Scratch
+- Level difference/step
+- Fixing defect
+- Condensation
+- Wallpapering defect
+- Joint defect
+- Heating defect
+- Natural ventilation defect
+- Water pressure defect
+- Operation defect/malfunction
+- Crack
+- Peeling
+- Separation/gap
+- Finishing defect
+- Installation defect
+- Construction defect
+- Contamination
+- Depression/subsidence
+- Noise
+- Drainage defect
+- Inspection/replacement
+- Hole
+- Lighting defect
+- White cement defect
+- Mold
+"""
+
+material_parts = """- Outlet
+- Wall
+- Bathtub
+- Range hood
+- Hinge
+- Accessory
+- Ceiling
+- Spray gun
+- Locking device
+- Drain/waste water pipe
+- Heating pipe
+- Valve
+- Ventilation duct
+- Detector
+- Cement
+- Mirror
+- Built-in wardrobe
+- Upper cabinet
+- Unit bath room (UBR)
+- Plastic window/door
+- Controller
+- Boiler
+- Sprinkler
+- Handle
+- Entrance door
+- Bathroom cabinet
+- Aluminum window/door
+- Sink
+- Door stopper
+- Drain
+- Insect screen
+- Wallpaper
+- Floor covering (sheet)
+- Door
+- Gas detector
+- Hot water distributor
+- Tile
+- Lighting fixture
+- Sensor
+- Automatic extinguisher
+- Paint
+- Kitchen countertop
+- Wash basin
+- Kitchen furniture
+- Slide bar
+- Meter
+- Shelf
+- Molding
+- Meter box
+- Storage cabinet
+- Floor
+- Actuator
+- Heating equipment
+- Glass window
+- Baseboard
+- Wallpaper & floor covering
+- Water-saving pedal
+- Gas equipment
+- Window frame
+- Wall
+- Door closer
+- Rainwater pipe
+- Silicone
+- Water supply
+- Ballast (lighting ballast/stabilizer)
+- Lower cabinet
+- Dresser/system furniture
+- Wooden window
+- Washing machine
+- Marble
+- Toilet
+- Fire extinguisher
+- Detergent container
+- Door lock
+- Faucet
+- Hose
+- Water saver
+- Facilities for the disabled
+- Window
+- Steel window
+- Ventilation system
+- Packing (gasket/seal)
+- Shoe rack
+- Downspout
+- Gypsum board
+- Glass
+- Wood floor
+- Latch
+- Water supply/hot water pipe
+"""
+
 prompt = """
 Role:You are a professional house construction inspector. Your job is to examine the provided image and determine if there is any defect. You need to see each part of the image and determine if there is any defect. You need to see the material part of the image and determine if there is any defect.
 

@@ -1,6 +1,6 @@
 import torch
 from PIL import Image
-from ovis.model.modeling_ovis import Ovis
+from ovis.model.modeling_ovis2_5 import Ovis2_5
 
 MODEL_PATH = "AIDC-AI/Ovis2.5-9B"
 
@@ -18,7 +18,7 @@ max_new_tokens = 3072
 thinking_budget = 2048
 
 # Load model
-model = Ovis.from_pretrained(
+model = Ovis2_5.from_pretrained(
     MODEL_PATH,
     torch_dtype=torch.bfloat16,
     device_map="cuda"
