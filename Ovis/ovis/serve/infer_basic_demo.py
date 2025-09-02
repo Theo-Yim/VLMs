@@ -5,7 +5,7 @@ from ovis.model.modeling_ovis2_5 import Ovis2_5
 # If you need video support, make sure moviepy is installed first:
 #   pip install moviepy==1.0.3
 try:
-    from moviepy.editor import VideoFileClip  # type: ignore
+    from moviepy import VideoFileClip  # type: ignore
     _HAS_MOVIEPY = True
 except Exception:
     _HAS_MOVIEPY = False

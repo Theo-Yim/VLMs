@@ -8,14 +8,17 @@ This implementation provides efficient LoRA (Low-Rank Adaptation) fine-tuning fo
 - **Fast Training**: Only trains adapter layers (1-5% of total parameters)
 - **Simple Integration**: Built on TRL SFTTrainer with PEFT support
 - **Multimodal Support**: Maintains Ovis2.5's vision-language capabilities
+- **Multi-GPU Support**: Automatically handles single and multi-GPU training
 - **Easy Deployment**: Merge adapters or deploy separately
 
 ## Files Overview
 
 - `train_theo_lora.py` - Main LoRA training script
-- `train_config_lora.json` - LoRA training configuration  
+- `train_config_lora.json` - Standard LoRA training configuration  
+- `train_config_lora_optimized.json` - Optimized configuration with validation
+- `train_launch_lora.sh` - Launch script for easy training
 - `merge_lora_adapters.py` - Script to merge adapters with base model
-- `train_launch_lora.sh` - Launch script for training
+- `split_dataset.py` - Utility to split dataset into train/validation sets
 
 ## Requirements
 
@@ -29,7 +32,7 @@ pip install flash-attn --no-build-isolation  # Optional, for faster attention
 
 ### 1. Prepare Your Data
 
-Use the same format as the original Ovis training:
+Use the Ovis conversation format:
 
 ```json
 [
@@ -39,67 +42,106 @@ Use the same format as the original Ovis training:
     "conversations": [
       {
         "from": "human", 
-        "value": "<image>\nWhat do you see?"
+        "value": "<image>\nWhat do you see in this construction site?"
       },
       {
         "from": "gpt",
-        "value": "I see a beautiful landscape..."
+        "value": "I can see a construction site with workers wearing safety helmets..."
       }
     ]
   }
 ]
 ```
 
-### 2. Configure Training
+### 2. Split Your Dataset (Optional)
 
-Edit `train_config_lora.json`:
+If you have a single dataset file, split it into training and validation sets:
+
+```bash
+python split_dataset.py
+```
+
+This will create `train_[original_name].json` and `validation_[original_name].json` files.
+
+### 3. Configure Training
+
+Choose one of the provided configurations or create your own:
+
+#### Standard Configuration (`train_config_lora.json`)
+- Basic LoRA setup without validation
+- Good for initial experiments
+
+#### Optimized Configuration (`train_config_lora_optimized.json`)
+- Includes validation dataset
+- Better hyperparameters for production training
+- Early stopping and best model selection
+
+Edit your chosen config file to update paths:
 
 ```json
 {
-    "data_path": "./data/train_data.json",
-    "image_folder": "./data/images/",
-    "output_dir": "./checkpoints/ovis25_lora",
+    "data_path": "./utils/lh-poc/train_training_dataset_lh_jh.json",
+    "eval_data_path": "./utils/lh-poc/val_training_dataset_lh_jh.json",
+    "image_folder": "/path/to/your/images",
+    "output_dir": "./Ovis/checkpoints/your_model_name",
     
-    "lora_r": 32,
-    "lora_alpha": 64, 
-    "lora_dropout": 0.1,
+    "lora_r": 64,
+    "lora_alpha": 128, 
+    "lora_dropout": 0.05,
     
-    "learning_rate": 1e-4,
-    "num_train_epochs": 3,
-    "per_device_train_batch_size": 2
+    "learning_rate": 2e-4,
+    "num_train_epochs": 2,
+    "per_device_train_batch_size": 4
 }
 ```
 
-### 3. Run Training
+### 4. Run Training
+
+#### Easy Launch with Script
 
 ```bash
-# Using launch script
-./train_launch_lora.sh
+# Use default configuration (train_config_lora.json) and 1 GPU
+sh train_launch_lora.sh
 
-# Or directly
-python train_theo_lora.py train_config_lora.json
+# Specify configuration file and use 8 GPUs
+sh train_launch_lora.sh "./Ovis/src_theo/lora/train_config_lora_optimized.json" 8
+
+# Specify just configuration file (uses 1 GPU by default)
+sh train_launch_lora.sh "./Ovis/src_theo/lora/train_config_lora_optimized.json"
 ```
 
-### 4. Merge Adapters (Optional)
+#### Direct Python Call
+
+```bash
+# Single GPU
+python ./Ovis/src_theo/lora/train_theo_lora.py "./Ovis/src_theo/lora/train_config_lora_optimized.json"
+
+# Multi-GPU with torchrun
+torchrun --nproc_per_node=8 ./Ovis/src_theo/lora/train_theo_lora.py "./Ovis/src_theo/lora/train_config_lora_optimized.json"
+```
+
+### 5. Merge Adapters (Optional)
+
+After training, you can merge the LoRA adapters with the base model:
 
 ```bash
 python merge_lora_adapters.py \
-    --adapter_path ./checkpoints/ovis25_lora \
-    --output_path ./checkpoints/ovis25_merged
+    --adapter_path ./Ovis/checkpoints/your_model_name \
+    --output_path ./Ovis/checkpoints/your_model_merged
 ```
 
 ## LoRA Configuration
 
 ### Key Parameters
 
-- **`lora_r`** (32): Rank of adaptation matrices. Higher = more parameters but better quality
-- **`lora_alpha`** (64): Scaling factor. Usually 2x the rank
-- **`lora_dropout`** (0.1): Dropout rate for LoRA layers
+- **`lora_r`** (32-128): Rank of adaptation matrices. Higher = more parameters but better quality
+- **`lora_alpha`** (64-256): Scaling factor. Usually 2x the rank
+- **`lora_dropout`** (0.05-0.1): Dropout rate for LoRA layers
 - **`lora_target_modules`**: Which layers to adapt
 
 ### Target Modules
 
-Default targets Qwen3-8B attention and MLP layers:
+Default targets attention and MLP layers:
 ```
 q_proj, k_proj, v_proj, o_proj,  # Attention
 gate_proj, up_proj, down_proj     # MLP
@@ -107,40 +149,73 @@ gate_proj, up_proj, down_proj     # MLP
 
 For vision components, set `apply_lora_to_vision: true` (experimental).
 
-### Memory vs Quality Trade-offs
+### Recommended Configurations
 
-| Rank (r) | Parameters | Quality | Memory | Training Time |
-|----------|------------|---------|---------|---------------|
-| 8        | Very Low   | Good    | Lowest  | Fastest       |
-| 16       | Low        | Better  | Low     | Fast          |
-| 32       | Medium     | High    | Medium  | Medium        |
-| 64       | High       | Highest | Higher  | Slower        |
+#### Small Dataset (<1k samples)
+```json
+{
+    "lora_r": 32,
+    "lora_alpha": 64,
+    "learning_rate": 1e-4,
+    "num_train_epochs": 3
+}
+```
+
+#### Medium Dataset (1k-10k samples)
+```json
+{
+    "lora_r": 64,
+    "lora_alpha": 128,
+    "learning_rate": 2e-4,
+    "num_train_epochs": 2
+}
+```
+
+#### Large Dataset (>10k samples)
+```json
+{
+    "lora_r": 128,
+    "lora_alpha": 256,
+    "learning_rate": 1e-4,
+    "num_train_epochs": 1
+}
+```
 
 ## Training Tips
 
 ### 1. Learning Rate
-- LoRA uses higher learning rates (~1e-4) vs full fine-tuning (2e-5)
-- Start with 1e-4 and adjust based on loss curves
+- LoRA typically uses higher learning rates (1e-4 to 2e-4)
+- Start with 2e-4 for most cases
+- Use cosine scheduler for better convergence
 
-### 2. Batch Size
-- Can use larger effective batch sizes due to lower memory usage
-- Try `per_device_train_batch_size=4` with `gradient_accumulation_steps=4`
+### 2. Batch Size and Memory
+- Effective batch size = `per_device_train_batch_size * gradient_accumulation_steps * num_gpus`
+- For 24GB GPU: batch_size=4, grad_accum=1
+- For 16GB GPU: batch_size=2, grad_accum=2
+- Enable `gradient_checkpointing` to save memory
 
-### 3. Epochs
-- LoRA converges faster, typically 1-3 epochs sufficient
-- Monitor for overfitting on small datasets
+### 3. Epochs and Steps
+- LoRA converges faster than full fine-tuning
+- Use validation dataset to monitor convergence
+- Enable early stopping to prevent overfitting
 
-### 4. GPU Memory
-- 5k samples should work on 16GB+ GPUs
-- Use `gradient_checkpointing=true` to reduce memory further
+### 4. Multi-GPU Training
+- The launch script automatically detects available GPUs
+- Uses `torchrun` for multi-GPU training
+- Reduces training time significantly
 
 ## Expected Results
 
 For 5k image-text samples on Ovis2.5-9B:
 
-- **Training Time**: ~2-4 hours on RTX 4090
-- **GPU Memory**: ~12-16GB
+### Single GPU (RTX 4090)
+- **Training Time**: ~4-6 hours
+- **GPU Memory**: ~16-20GB
 - **Trainable Parameters**: ~67M (1.0% of total)
+
+### 8x GPU Setup
+- **Training Time**: ~30-60 minutes
+- **GPU Memory**: ~12-16GB per GPU
 - **Adapter Size**: ~260MB (vs 18GB full model)
 
 ## Deployment Options
@@ -148,56 +223,76 @@ For 5k image-text samples on Ovis2.5-9B:
 ### Option 1: Use Adapters Directly
 ```python
 from peft import AutoPeftModelForCausalLM
-model = AutoPeftModelForCausalLM.from_pretrained("./checkpoints/ovis25_lora")
+model = AutoPeftModelForCausalLM.from_pretrained(
+    "./Ovis/checkpoints/your_model_name",
+    torch_dtype=torch.bfloat16,
+    device_map="auto"
+)
 ```
 
 ### Option 2: Merge and Deploy
 ```python
-# After merging
+# After merging with merge_lora_adapters.py
 from ovis.model.modeling_ovis2_5 import Ovis2_5
-model = Ovis2_5.from_pretrained("./checkpoints/ovis25_merged")
+model = Ovis2_5.from_pretrained("./Ovis/checkpoints/your_model_merged")
 ```
 
-### Option 3: Multiple Adapters
-Keep base model + task-specific adapters for different use cases.
+### Option 3: Multiple Task-Specific Adapters
+Keep base model + different adapters for different tasks/domains.
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **CUDA OOM**: Reduce batch size or use gradient checkpointing
-2. **Slow convergence**: Increase learning rate to 2e-4
-3. **Import errors**: Install latest TRL and PEFT versions
-4. **Quality issues**: Increase LoRA rank or target more modules
-5. **Dataloader length error**: Use `max_steps` instead of `num_train_epochs`
+1. **CUDA OOM**: 
+   - Reduce `per_device_train_batch_size`
+   - Enable `gradient_checkpointing`
+   - Increase `gradient_accumulation_steps`
 
-### Dataloader Length Issue
+2. **Slow convergence**: 
+   - Increase learning rate to 2e-4
+   - Check if validation loss is decreasing
 
-If you see: `ValueError: args.max_steps must be set to a positive value if dataloader does not have a length`
+3. **Import errors**: 
+   ```bash
+   pip install --upgrade trl peft transformers
+   ```
 
-**Solution**: Calculate and set `max_steps` explicitly:
+4. **Quality issues**: 
+   - Increase LoRA rank
+   - Train for more epochs
+   - Check data quality and format
 
-```bash
-# Calculate steps for your dataset
-python calculate_training_steps.py --dataset ./data/train_data.json --batch_size 4 --grad_accum 4 --epochs 5
-
-# Use the output to set max_steps in your config
-```
-
-**Formula**: 
-- `steps_per_epoch = ceil(dataset_size / (batch_size * grad_accum * num_gpus))`
-- `max_steps = steps_per_epoch * num_epochs`
+5. **Dataset path errors**:
+   - Ensure paths in config file are correct
+   - Check image folder exists and contains images
+   - Verify JSON format is correct
 
 ### Memory Optimization
 
+For limited GPU memory:
 ```json
 {
     "per_device_train_batch_size": 1,
-    "gradient_accumulation_steps": 16, 
+    "gradient_accumulation_steps": 8,
     "gradient_checkpointing": true,
-    "dataloader_num_workers": 2
+    "dataloader_num_workers": 2,
+    "dataloader_pin_memory": false
 }
 ```
+
+### Training Monitoring
+
+The script automatically:
+- Calculates training steps based on dataset size
+- Saves checkpoints at regular intervals
+- Provides progress updates
+- Monitors GPU usage
+
+Check logs for:
+- Training/validation loss curves
+- GPU memory usage
+- Training speed (samples/sec)
 
 ## Advanced Usage
 
@@ -210,22 +305,14 @@ python calculate_training_steps.py --dataset ./data/train_data.json --batch_size
 ```
 
 ### Quantized Training (QLoRA)
-Add to model loading:
-```python
-from transformers import BitsAndBytesConfig
-
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4", 
-    bnb_4bit_compute_dtype=torch.bfloat16
-)
-```
+For even lower memory usage, modify the model loading code to use 4-bit quantization.
 
 ## Comparison with Full Fine-tuning
 
-| Method | Memory | Speed | Quality | Deployment |
-|--------|--------|-------|---------|------------|
-| Full FT | 40GB+ | Slow | Best | Simple |
-| LoRA | 16GB | Fast | Very Good | Flexible |
+| Method | GPU Memory | Training Speed | Model Quality | Deployment |
+|--------|------------|----------------|---------------|------------|
+| Full Fine-tuning | 40GB+ | Slow | Best | Simple |
+| LoRA | 16-20GB | Fast | Very Good | Flexible |
+| QLoRA | 8-12GB | Medium | Good | Complex |
 
-LoRA is recommended for most use cases due to efficiency and flexibility.
+**Recommendation**: Use LoRA for most applications - it provides excellent quality with much better efficiency and flexibility.

@@ -3,9 +3,12 @@ Merge LoRA adapters with Ovis2.5 base model
 """
 
 import argparse
+import os
 import torch
-from peft import AutoPeftModelForCausalLM
+from peft import PeftModel, PeftConfig
+from transformers import AutoTokenizer
 from ovis.model.modeling_ovis2_5 import Ovis2_5
+from ovis.model.configuration_ovis2_5 import Ovis2_5_Config
 
 
 def merge_lora_adapters(
@@ -24,14 +27,32 @@ def merge_lora_adapters(
         torch_dtype: Torch dtype for model
     """
     
-    print(f"Loading LoRA model from {adapter_path}...")
+    print(f"Loading LoRA adapters from {adapter_path}...")
     
-    # Load the PEFT model with adapters
-    model = AutoPeftModelForCausalLM.from_pretrained(
-        adapter_path,
+    # Load PEFT config to get base model info
+    peft_config = PeftConfig.from_pretrained(adapter_path)
+    base_model_name = peft_config.base_model_name_or_path
+    
+    print(f"Loading base model: {base_model_name}")
+    
+    # Load the base model using our local Ovis2_5 class
+    config = Ovis2_5_Config.from_pretrained(base_model_name, trust_remote_code=True)
+    base_model = Ovis2_5.from_pretrained(
+        base_model_name,
+        config=config,
         device_map=device_map,
         torch_dtype=torch_dtype,
         trust_remote_code=True,
+    )
+    
+    print("Loading LoRA adapters...")
+    
+    # Load the PEFT model with our base model
+    model = PeftModel.from_pretrained(
+        base_model,
+        adapter_path,
+        device_map=device_map,
+        torch_dtype=torch_dtype,
     )
     
     print("Merging LoRA adapters with base model...")
@@ -48,18 +69,17 @@ def merge_lora_adapters(
         max_shard_size="5GB"
     )
     
-    # Also save the tokenizer
-    tokenizer = model.tokenizer if hasattr(model, 'tokenizer') else None
-    if tokenizer is None:
-        # Try to get tokenizer from the original model config
+    # Load and save the tokenizer
+    print("Saving tokenizer...")
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(adapter_path, trust_remote_code=True)
+        tokenizer.save_pretrained(output_path)
+    except:
         try:
-            from transformers import AutoTokenizer
-            tokenizer = AutoTokenizer.from_pretrained(adapter_path)
+            tokenizer = AutoTokenizer.from_pretrained(base_model_name, trust_remote_code=True)
+            tokenizer.save_pretrained(output_path)
         except:
             print("Warning: Could not save tokenizer. You may need to copy it manually.")
-    
-    if tokenizer is not None:
-        tokenizer.save_pretrained(output_path)
     
     print("Merge completed successfully!")
     print(f"Merged model saved to: {output_path}")
