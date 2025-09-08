@@ -189,7 +189,7 @@ print(f"총 하자 객체 수: {len(defect_info)}")
 
 - Python 3.7+
 - requests (다운로드용)
-- spb_label (SuperB AI SDK)
+- spb_label (SuperB AI SDK) -> pip install --upgrade superb-ai-label
 - pathlib, json, os (내장 모듈)
 
 ## 🔧 설정

@@ -4,7 +4,7 @@ import glob
 from tqdm import tqdm
 from dataloader import LHDataLoader
 import re
-from prompt import prompt_inference
+from prompt_theo import prompt_inference
 
 #   {
 #     "id": "sample_001",
@@ -23,8 +23,15 @@ from prompt import prompt_inference
 
 def find_label_files(base_path, label_id):
     """Find all files matching f'{label_id}.txt' in subfolders"""
-    pattern = os.path.join(base_path, "**", f"{label_id}.txt")
-    files = glob.glob(pattern, recursive=True)
+    # pattern = os.path.join(base_path, "**", f"{label_id}.txt")
+    # files = glob.glob(pattern, recursive=True)
+    patterns = [
+        os.path.join(base_path, "**", f"{label_id}.txt"),
+        os.path.join(base_path, "**", f"{label_id}_bbox.txt")
+    ]
+    files = []
+    for pattern in patterns:
+        files.extend(glob.glob(pattern, recursive=True))
     return files
 
 def refine_content(content, img_name):
@@ -38,7 +45,8 @@ def refine_content(content, img_name):
     content = re.sub(r'</A(?!>)', '</A>', content)
 
     answer = content.split("<A>")[-1]
-    answer = answer.split("</A>")[0].strip()
+    answer, bbox = answer.split("</A>")[0].strip(), answer.split("</A>")[1].strip()
+    bbox = None if len(bbox) < 12 else bbox
     # answer = answer[answer.find("[")+1:answer.find("]")]
     answer = answer[answer.find("["):answer.rfind("]")+1]
     answer = answer.strip()
@@ -54,18 +62,18 @@ def refine_content(content, img_name):
     content = content.replace("<A>", "<answer>")
     content = content.replace("</A>", "</answer>")
     
-    return content
+    return content, bbox
 
 
 if __name__ == "__main__":
-    data_root = "/mnt/nas1/data/lh-poc/lh-data/K-LH-302 2025-08-22 155843_export"
-    image_root = "/mnt/nas1/data/lh-poc/lh-data-image/image/20250722"
+    data_root = "/mnt/nas1/data/lh-poc/"
+    # image_root = "/mnt/nas1/data/lh-poc/lh-data-image/image/20250722"
 
     output_path = "/workspace/VLMs/utils/lh-poc/training_dataset.json"
     output_list = []
 
     # Load dataset
-    loader = LHDataLoader(data_root, image_root)
+    loader = LHDataLoader(data_root)
 
     # Process only the assigned slice
     for item in tqdm(loader):
@@ -74,6 +82,11 @@ if __name__ == "__main__":
         index = item["index"]
         img_name = item["meta_data"]["data_key"]
         label_id = item["label_id"]
+        # if 'objects' in item['label_data'] and len(item['label_data']['objects']) > 0:
+        #     bbox = item['label_data']['objects'][0]['annotation']['coord']
+        #     bbox = [bbox['x'], bbox['y'], bbox['x'] + bbox['width'], bbox['y'] + bbox['height']]
+        # else:
+        #     bbox = [-1, -1, -1, -1]
 
         base_path = "/workspace/VLMs/utils/lh-poc/results_theo_parallel"
         found_files = find_label_files(base_path, label_id)
@@ -82,8 +95,7 @@ if __name__ == "__main__":
             continue
         with open(found_files[0], "r") as f:
             content = f.read()
-
-        content = refine_content(content, img_name)
+        content, _ = refine_content(content, img_name)
 
         # for file_path in found_files:
         #     print(f"Found: {file_path}")
@@ -91,6 +103,7 @@ if __name__ == "__main__":
         obj = {
             "id": f"sample_{index:05d}",
             "image": img_name,
+            "bbox(xyxy)" : None,
             "conversations": [
                 {
                     "from": "human",
@@ -103,6 +116,14 @@ if __name__ == "__main__":
             ]
         }
         output_list.append(obj)
+        
+        if len(found_files) == 2:
+            with open(found_files[1], "r") as f:
+                content = f.read()
+                content, bbox = refine_content(content, img_name)
+                obj["bbox(xyxy)"] = bbox
+                obj["conversations"][1]["value"] = content
+                output_list.append(obj)
 
     with open(output_path, "a") as f:
         json.dump(output_list, f, indent=2, ensure_ascii=False)

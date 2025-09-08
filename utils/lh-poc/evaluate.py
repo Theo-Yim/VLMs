@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from matplotlib import rc
 import pandas as pd
 import matplotlib.font_manager as fm
+from name import MATERIAL_CLASS, SPACE_CLASS, DEFECT_CLASS
+import numpy as np
 
 def standardize_result(result_content):
     split_result = result_content.split("\n")
@@ -116,27 +118,42 @@ if __name__ == "__main__":
             
             # Calculate similarities and store categories
             if 'space' in prediction:
-                space_similarity = text_similarity(model, ground_truth['공간'], prediction['space'], embedding_cache)
-                actual_spaces.append(ground_truth['공간'])
-                predicted_spaces.append(prediction['space'])
+                if ground_truth['공간'] not in SPACE_CLASS:
+                    print(f"경고: 공간 라벨 데이터에 없음 - {ground_truth['공간']}")
+                    continue
+                gt = SPACE_CLASS[ground_truth['공간']]
+                pred = prediction['space']
+                space_similarity = text_similarity(model, gt, pred, embedding_cache)
+                actual_spaces.append(gt)
+                predicted_spaces.append(pred)
             else:
                 space_similarity = 0
                 actual_spaces.append(ground_truth['공간'])
                 predicted_spaces.append('unknown')
                 
             if 'material_part' in prediction:
-                defect_present_similarity = text_similarity(model, ground_truth['부위자재'], prediction['material_part'], embedding_cache)
-                actual_materials.append(ground_truth['부위자재'])
-                predicted_materials.append(prediction['material_part'])
+                if ground_truth['부위자재'] not in MATERIAL_CLASS:
+                    print(f"경고: 부위자재 라벨 데이터에 없음 - {ground_truth['부위자재']}")
+                    continue
+                gt = MATERIAL_CLASS[ground_truth['부위자재']]
+                pred = prediction['material_part']
+                defect_present_similarity = text_similarity(model, gt, pred, embedding_cache)
+                actual_materials.append(gt)
+                predicted_materials.append(pred)
             else:
                 defect_present_similarity = 0
                 actual_materials.append(ground_truth['부위자재'])
                 predicted_materials.append('unknown')
                 
             if 'defect_type' in prediction:
-                defect_type_similarity = text_similarity(model, ground_truth['하자유형'], prediction['defect_type'], embedding_cache)
-                actual_defects.append(ground_truth['하자유형'])
-                predicted_defects.append(prediction['defect_type'])
+                if ground_truth['하자유형'] not in DEFECT_CLASS:
+                    print(f"경고: 하자유형 라벨 데이터에 없음 - {ground_truth['하자유형']}")
+                    continue
+                gt = DEFECT_CLASS[ground_truth['하자유형']]
+                pred = prediction['defect_type']
+                defect_type_similarity = text_similarity(model, gt, pred, embedding_cache)
+                actual_defects.append(gt)
+                predicted_defects.append(pred)
             else:
                 defect_type_similarity = 0
                 actual_defects.append(ground_truth['하자유형'])
@@ -154,8 +171,14 @@ if __name__ == "__main__":
     # Plot 1: Box plot of similarities
     data = [space_similarities, material_similarities, defect_similarities]
     ax1.boxplot(data, labels=['Space', 'Material', 'Defect Type'])
+    
+    # Add mean points
+    means = [np.mean(space_similarities), np.mean(material_similarities), np.mean(defect_similarities)]
+    ax1.plot([1, 2, 3], means, 'rd', label='Mean')
+    
     ax1.set_title('Distribution of Similarity Scores')
     ax1.set_ylabel('Similarity Score')
+    ax1.legend()
     
     # Plot 2: Scatter plot of individual scores
     x = range(len(label_ids))
@@ -201,9 +224,9 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig(os.path.join(plot_dir, 'class_distributions.png'))
     plt.close()
-
     
-    # Save numerical results
+    # Category별 평균 유사도 계산 및 시각화
+    # 데이터프레임 생성
     results_df = pd.DataFrame({
         'label_id': label_ids,
         'space_similarity': space_similarities,
@@ -216,4 +239,94 @@ if __name__ == "__main__":
         'actual_defect': actual_defects,
         'predicted_defect': predicted_defects
     })
+    
+    # 각 groundtruth category별 평균 유사도 계산
+    space_mean_by_category = results_df.groupby('actual_space')['space_similarity'].mean().sort_values(ascending=False)
+    material_mean_by_category = results_df.groupby('actual_material')['material_similarity'].mean().sort_values(ascending=False)
+    defect_mean_by_category = results_df.groupby('actual_defect')['defect_similarity'].mean().sort_values(ascending=False)
+    
+    # Category별 평균 유사도 시각화
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(30, 20))  # 세로 크기 증가
+    
+    # 공간별 평균 유사도
+    bars1 = ax1.bar(range(len(space_mean_by_category)), space_mean_by_category.values, color='skyblue')
+    ax1.set_title('공간별 평균 유사도')
+    ax1.set_xlabel('공간 종류')
+    ax1.set_ylabel('평균 유사도')
+    ax1.set_xticks(range(len(space_mean_by_category)))
+    ax1.set_xticklabels(space_mean_by_category.index, rotation=45, ha='right')
+    ax1.grid(axis='y', alpha=0.3)
+    plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    # 값 표시
+    for i, bar in enumerate(bars1):
+        height = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                f'{height:.3f}', ha='center', va='bottom', fontsize=8)
+    
+    # 부위자재별 평균 유사도
+    bars2 = ax2.bar(range(len(material_mean_by_category)), material_mean_by_category.values, color='lightgreen')
+    ax2.set_title('부위자재별 평균 유사도')
+    ax2.set_xlabel('부위자재 종류')
+    ax2.set_ylabel('평균 유사도')
+    ax2.set_xticks(range(len(material_mean_by_category)))
+    ax2.set_xticklabels(material_mean_by_category.index, rotation=45, ha='right')
+    ax2.grid(axis='y', alpha=0.3)
+    plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    # 값 표시
+    for i, bar in enumerate(bars2):
+        height = bar.get_height()
+        ax2.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                f'{height:.3f}', ha='center', va='bottom', fontsize=8)
+    
+    # 하자유형별 평균 유사도
+    bars3 = ax3.bar(range(len(defect_mean_by_category)), defect_mean_by_category.values, color='lightcoral')
+    ax3.set_title('하자유형별 평균 유사도')
+    ax3.set_xlabel('하자유형 종류')
+    ax3.set_ylabel('평균 유사도')
+    ax3.set_xticks(range(len(defect_mean_by_category)))
+    ax3.set_xticklabels(defect_mean_by_category.index, rotation=45, ha='right')
+    ax3.grid(axis='y', alpha=0.3)
+    plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    # 값 표시
+    for i, bar in enumerate(bars3):
+        height = bar.get_height()
+        ax3.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                f'{height:.3f}', ha='center', va='bottom', fontsize=8)
+    
+    plt.tight_layout(h_pad=1.5)  # 서브플롯 간 간격 증가
+    plt.savefig(os.path.join(plot_dir, 'mean_similarity_by_category.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Category별 평균 유사도 요약 출력
+    print("\n=== 공간별 평균 유사도 ===")
+    for category, mean_sim in space_mean_by_category.items():
+        print(f"{category}: {mean_sim:.4f}")
+    
+    print("\n=== 부위자재별 평균 유사도 ===")
+    for category, mean_sim in material_mean_by_category.items():
+        print(f"{category}: {mean_sim:.4f}")
+    
+    print("\n=== 하자유형별 평균 유사도 ===")
+    for category, mean_sim in defect_mean_by_category.items():
+        print(f"{category}: {mean_sim:.4f}")
+
+    
+    # Save numerical results to CSV
     results_df.to_csv(os.path.join(plot_dir, 'similarity_scores.csv'), index=False)
+    
+    # Save category별 평균 유사도 결과도 CSV로 저장
+    category_means = pd.DataFrame({
+        'category_type': ['공간'] * len(space_mean_by_category) + 
+                        ['부위자재'] * len(material_mean_by_category) + 
+                        ['하자유형'] * len(defect_mean_by_category),
+        'category_name': list(space_mean_by_category.index) + 
+                        list(material_mean_by_category.index) + 
+                        list(defect_mean_by_category.index),
+        'mean_similarity': list(space_mean_by_category.values) + 
+                          list(material_mean_by_category.values) + 
+                          list(defect_mean_by_category.values)
+    })
+    category_means.to_csv(os.path.join(plot_dir, 'category_mean_similarities.csv'), index=False)

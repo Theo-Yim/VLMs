@@ -14,7 +14,7 @@ import torch
 from ovis.model.modeling_ovis2_5 import Ovis2_5
 
 # Import original Ovis training components
-from ovis.train.dataset.conversation_dataset import ConversationDataset
+from ovis.train.dataset.conversation_bbox_dataset import ConversationBboxDataset
 from ovis.train.dataset.multimodal_dataset import DataCollatorForMultimodalDataset
 from transformers import (
     HfArgumentParser,
@@ -206,7 +206,7 @@ def main():
     
     # Create dataset using original ConversationDataset
     print(f"Loading training dataset from {training_args.data_path}...")
-    train_dataset = ConversationDataset(
+    train_dataset = ConversationBboxDataset(
         name=training_args.data_name,
         info=dataset_info[training_args.data_name],
         model=model,
@@ -255,7 +255,7 @@ def main():
                 "image_dir": training_args.image_folder,
             }
         }
-        eval_dataset = ConversationDataset(
+        eval_dataset = ConversationBboxDataset(
             name=f"{training_args.data_name}_eval",
             info=eval_dataset_info[f"{training_args.data_name}_eval"],
             model=model,

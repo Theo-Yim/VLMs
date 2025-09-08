@@ -4,8 +4,8 @@
 echo "=== Simple Parallel InternVL Launcher ==="
 
 # EDIT THESE PATHS FOR YOUR SETUP
-DATA_ROOT="/mnt/nas1/data/lh-poc/lh-data/K-LH-302 2025-08-22 155843_export"
-IMAGE_ROOT="/mnt/nas1/data/lh-poc/lh-data-image/image/20250722"
+DATA_ROOT="/home/Theo-Yim/data/lh-poc/"
+# IMAGE_ROOT="/mnt/nas1/data/lh-poc/lh-data-image/image/20250722"
 RESULT_DIR="/workspace/VLMs/utils/lh-poc/results_theo_parallel"
 MODEL_PATH="OpenGVLab/InternVL3_5-38B"
 PYTHON_SCRIPT="inference_theo_pa.py"
@@ -80,7 +80,7 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
 print(count)
 EOF
 
-TOTAL_ITEMS=`python3 /tmp/count_data.py "$DATA_ROOT" "$IMAGE_ROOT" 2>/dev/null | tail -1`
+TOTAL_ITEMS=`python3 /tmp/count_data.py "$DATA_ROOT" "train" 2>/dev/null | tail -1`
 rm /tmp/count_data.py
 
 echo "Total items: $TOTAL_ITEMS"
@@ -113,12 +113,12 @@ for gpu_id in $GPU_LIST; do
     # Start process
     python3 "$PYTHON_SCRIPT" \
         --data_root "$DATA_ROOT" \
-        --image_root "$IMAGE_ROOT" \
         --result_dir "$RESULT_DIR" \
         --model_path "$MODEL_PATH" \
         --gpu_id $gpu_id \
         --start_idx $start \
         --end_idx $end \
+        --enable_thinking \
         --process_id $process_id > "$RESULT_DIR/logs/process_$process_id.log" 2>&1 &
     
     echo "Started process $process_id on GPU $gpu_id (log: process_$process_id.log)"

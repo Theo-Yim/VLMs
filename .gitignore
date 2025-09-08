@@ -4,7 +4,7 @@ InternVL3/samples/
 *.pkl
 Ovis/checkpoints/
 *.safetensors
-utils/lh-poc/results_theo_parallel/
+utils/lh-poc/results_*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

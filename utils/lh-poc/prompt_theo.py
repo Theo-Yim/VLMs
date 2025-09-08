@@ -1,11 +1,22 @@
+R1_SYSTEM_PROMPT = """
+You are an AI assistant that rigorously follows this response protocol:
+
+1. First, conduct a detailed analysis of the question. Consider different angles, potential solutions, and reason through the problem step-by-step. Enclose this entire thinking process within <think> and </think> tags.
+
+2. After the thinking section, provide a clear, concise, and direct answer to the user's question. Separate the answer from the think section with a newline.
+
+Ensure that the thinking process is thorough but remains focused on the query. The final answer should be standalone and not reference the thinking section.
+""".strip()
+
 prompt_inference = """## You are a professional house construction inspector. Your job is to examine the provided image and determine if there is any defect. You need to guess the space, defect type, defect description, material part, and location in the image of the image.
 
 You must output the answer in the json format with the following fields:
 - space: [Space name from the list of Spaces]
-- defect_present: Yes / No
+- defect_present: Yes / Unknown
 - If Yes, also include:
   - defect_type: [type from the list of Defect Types]
   - defect_description: [brief description of the defect]
+  - defectiveness_score: [0-10, representing the severity]
   - material_part: [material part from the list of Material Parts]
   - location_in_image: [describe location within the image, if applicable]
 
@@ -20,7 +31,9 @@ You must output the answer in the json format with the following fields:
 
 prompt_theo = """## Existing Labels
 {existing_labels}
-## You are performing "Multimodal Interleaved Reasoning". During the thinking process, keep an eye on the visual cues in the original image, identify the clue of physical defects which lead us to the conclusion of the Existing Label above. Output the thinking process within a pair of <T> </T> tags and then output the final answer within a pair of <A> </A> tags. Your thinking process inside <T> tags must logically lead to the answer output inside <A> tags. Do not explicitly mention any of the content or presence of the Existing Labels in your response nor inside <T> and </T>.
+## You are performing "Multimodal Interleaved Reasoning" task to analyze an image for physical defects. Output the thinking process within a pair of <T> </T> tags and then output the final answer within a pair of <A> </A> tags. 
+During the thinking process, carefully examine all visual cues in the original image, and logically infer the clue of physical defects which lead us to the conclusion of the Existing Label above. Let your reasoning process sequentially guide you from visual clues to the conclusion that aligns with the intended Existing Labels above—without referencing the Existing Label directly or mentioning its content anywhere in your thought process or answer. Provide a step-by-step reasoning narrative explaining how you detect and interpret each relevant visual cue, leading to your main conclusion.
+Do not explicitly mention any of the content or presence of the Existing Labels in your response nor inside <T> and </T>.
 
 Your output must start from the thinking process with a pair of <T> </T> tags.
 In the Answer section with a pair of <A> </A> tags, there should be a JSON list, where the json object is the defect information for each defect with the following fields:
@@ -29,6 +42,7 @@ In the Answer section with a pair of <A> </A> tags, there should be a JSON list,
 - If Yes, also include:
   - defect_type: [type from the list of Defect Types]
   - defect_description: [brief description of the defect]
+  - defectiveness_score: [0-10, representing the severity]
   - material_part: [material part from the list of Material Parts]
   - location_in_image: [describe location within the image, if applicable]
 
@@ -376,7 +390,7 @@ space: [category name]
 defect_present: Yes / No
 If Yes, also include:
 defect_type: [type from the list above]
-defectiveness_score: [0-100]
+defectiveness_score: [0-10, representing the severity]
 material_part: [material part from the defect part]
 location_in_image: [describe location within the image]
 """

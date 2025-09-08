@@ -12,43 +12,48 @@ import os
 
 import torch
 from dataloader import LHDataLoader
-from prompt import defect_types, material_parts, prompt_theo, spaces
+from prompt_theo import defect_types, material_parts, prompt_theo, spaces, R1_SYSTEM_PROMPT
+from prompt_sb import ENGLISH_TRAIN_PROMPT
 from tqdm import tqdm
 
 from InternVL3.utils.preprocess import load_image
 from InternVL3.utils.processor_utils import load_models
 
 
-def extract_label_information(item):
+def extract_label_information(annotation_data):
     """
     Extract information dictionary from label data
     Same logic as mentioned by the user
     """
     information = {}
-    target_dict = {"공간": "space", "부위자재": "material_parts", "하자유형": "defect_types", "하자내용": "defect_description"}
-    
-    # Optimized: Use any() with generator expression for early exit
-    is_no_defect = any("NO(이미지 판단 불가)" in tag['name'] for tag in item['meta_data']['tags'])
-    
-    # Optimized: Cache label_data access and use more efficient property processing
-    label_data = item.get("label_data", {})
-    categories = label_data.get("categories", {})
-    properties = categories.get("properties", [])
-    
-    # Optimized: Use dict comprehension for better performance
-    property_mapping = {
-        prop["property_name"]: prop.get("value") or prop.get("option_names")
-        for prop in properties
-        if "property_name" in prop and prop["property_name"] in target_dict
+    target_dict = {
+        "공간": "space",
+        "부위자재": "material_parts",
+        "하자유형": "defect_types",
+        "하자내용": "defect_description",
     }
-    
+
+    # Optimized: Use any() with generator expression for early exit
+    is_no_defect = any("NO(이미지 판단 불가)" in tag for tag in annotation_data["tags"])
+
+    # Optimized: Cache label_data access and use more efficient property processing
+    # label_data = annotation_data.get("label_data", {})
+    # categories = label_data.get("categories", {})
+    properties =  annotation_data['metadata']  # categories.get("properties", [])
+
+    # # Optimized: Use dict comprehension for better performance
+    # property_mapping = {
+    #     prop["property_name"]: prop.get("value") or prop.get("option_names")
+    #     for prop in properties
+    #     if "property_name" in prop and prop["property_name"] in target_dict
+    # }
     # Map properties to information dict
     for korean_name, english_name in target_dict.items():
-        if korean_name in property_mapping:
-            information[english_name] = property_mapping[korean_name]
-    
+        if korean_name in properties:
+            information[english_name] = properties[korean_name]
+
     if is_no_defect:
-        information["defect_present"] = "No"
+        information["defect_present"] = "Unknown"
         information["defect_type"] = "None"
         information["defect_description"] = "None"
     else:
@@ -64,15 +69,15 @@ def main():
     parser.add_argument(
         "--data_root",
         type=str,
-        default="/mnt/nas1/data/lh-poc/lh-data/K-LH-302 2025-08-22 155843_export",
+        default="/mnt/nas1/data/lh-poc/",
         help="Path to label data root",
     )
-    parser.add_argument(
-        "--image_root",
-        type=str,
-        default="/mnt/nas1/data/lh-poc/lh-data-image/image/20250722",
-        help="Path to image root",
-    )
+    # parser.add_argument(
+    #     "--image_root",
+    #     type=str,
+    #     default="/mnt/nas1/data/lh-poc/lh-data-image/image/20250722",
+    #     help="Path to image root",
+    # )
     parser.add_argument(
         "--result_dir",
         type=str,
@@ -122,10 +127,12 @@ def main():
     device_map = f"cuda:0"  # Always 0 since we set CUDA_VISIBLE_DEVICES
     model, tokenizer = load_models(args.model_path, device_map=device_map)
     print(f"Process {args.process_id}: Model loaded successfully")
+    if args.enable_thinking:
+        model.system_message = R1_SYSTEM_PROMPT
 
     # Load dataset
     print(f"Process {args.process_id}: Loading data...")
-    loader = LHDataLoader(args.data_root, args.image_root)
+    loader = LHDataLoader(args.data_root, type="train")
     total_items = len(loader)
 
     # Calculate data slice for this process
@@ -165,42 +172,44 @@ def main():
         item = loader[idx]
 
         # Get metadata
-        data_key = item["meta_data"]["data_key"]
-        label_id = item["label_id"]
+        data_key = item["label_id"]
+        # label_id = item["label_id"]
 
         # Check if result already exists
-        result_path = os.path.join(process_result_dir, f"{label_id}.txt")
+        result_path = os.path.join(process_result_dir, f"{data_key}.txt")
         if os.path.exists(result_path) and not args.rerun:
             continue
 
         # Get image path
-        image_path = os.path.join(loader.image_root, data_key)
+        image_path = os.path.join(loader.image_path, data_key + ".jpg")
         if not os.path.exists(image_path):
             print(f"Process {args.process_id}: Warning - Image not found: {image_path}")
             error_count += 1
             continue
 
-        # Load and preprocess image
         pixels = load_image(image_path, max_num=12).to(torch.bfloat16).cuda()
 
         # Extract existing label information
-        existing_labels = extract_label_information(item)
+        existing_labels = extract_label_information(item["annotation_data"])
 
-        prompt_1 = prompt_theo.format(
-            spaces=spaces,
-            material_parts=material_parts,
-            defect_types=defect_types,
-            existing_labels=existing_labels,
-        )
+        prompt_sb = True
+        if not prompt_sb:
+            prompt_1 = prompt_theo.format(
+                spaces=spaces,
+                material_parts=material_parts,
+                defect_types=defect_types,
+                existing_labels=existing_labels,
+            )
+        else:
+            prompt_1 = f"### Existing Label:\n{existing_labels}" + ENGLISH_TRAIN_PROMPT
 
         if (idx - args.start_idx) % 10 == 0:  # Print every 10th item
             print(f"Process {args.process_id}: Processing {idx + 1}/{total_items}: {data_key}")
-            print(f"Process {args.process_id}: Label ID: {label_id}")
+            print(f"Process {args.process_id}: Label ID: {data_key}")
 
         generation_config = dict(
             max_new_tokens=args.max_new_tokens, temperature=args.temperature, do_sample=True
         )
-
         # Run inference
         with torch.inference_mode():
             response = model.chat(tokenizer, pixels, prompt_1, generation_config)
@@ -208,6 +217,19 @@ def main():
         # Save result
         with open(result_path, "w", encoding="utf-8") as f:
             f.write(response)
+
+        # if bbox is present, inference one more time with the bbox
+        # Load and preprocess image
+        if "annotation" in item["annotation_data"] and 'coord' in item["annotation_data"]["annotation"]:
+            bbox = item["annotation_data"]["annotation"]["coord"]
+            bbox = [bbox["x"], bbox["y"], bbox["x"] + bbox["width"], bbox["y"] + bbox["height"]]
+        else:
+            continue
+        pixels = load_image(image_path, max_num=12, bbox_xyxy=bbox).to(torch.bfloat16).cuda()
+        with torch.inference_mode():
+            response = model.chat(tokenizer, pixels, prompt_1, generation_config)
+        with open(result_path[:-4] + "_bbox.txt", "a", encoding="utf-8") as f:
+            f.write(response + "\n" + str(bbox))
 
         processed_count += 1
 

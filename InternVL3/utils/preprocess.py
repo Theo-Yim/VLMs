@@ -87,7 +87,7 @@ def dynamic_preprocess(image, min_num=1, max_num=12, image_size=448, use_thumbna
     return processed_images
 
 
-def load_image(image_file, max_num=12, input_size=448, use_thumbnail=False):
+def load_image(image_file, max_num=12, input_size=448, use_thumbnail=False, bbox_xyxy=None):
     # Add file existence check
     if not os.path.exists(image_file):
         raise FileNotFoundError(f"Image file not found: {image_file}")
@@ -96,6 +96,28 @@ def load_image(image_file, max_num=12, input_size=448, use_thumbnail=False):
         image = Image.open(image_file).convert("RGB")
     except Exception as e:
         raise ValueError(f"Cannot open image {image_file}: {str(e)}")
+
+    if bbox_xyxy is not None:  # Theo: random cropping with bbox, usecase: lh-poc
+        img_width, img_height = image.size
+        
+        # Generate random crop coordinates
+        # x0: random between 0 and bbox[0]
+        x0 = 0 if int(bbox_xyxy[0]) == 0 else np.random.randint(0, max(0, int(bbox_xyxy[0])))
+        # y0: random between 0 and bbox[1] 
+        y0 = 0 if int(bbox_xyxy[1]) == 0 else np.random.randint(0, max(0, int(bbox_xyxy[1])))
+        # x1: random between bbox[2] and img_width
+        x1 = img_width if int(bbox_xyxy[2]) >= img_width else np.random.randint(min(img_width-1, int(bbox_xyxy[2])), img_width)
+        # y1: random between bbox[3] and img_height
+        y1 = img_height if int(bbox_xyxy[3]) >= img_height else np.random.randint(min(img_height-1, int(bbox_xyxy[3])), img_height)
+        
+        # Ensure valid crop coordinates
+        x0 = max(0, min(x0, img_width - 1))
+        y0 = max(0, min(y0, img_height - 1))
+        x1 = max(x0 + 1, min(x1, img_width))
+        y1 = max(y0 + 1, min(y1, img_height))
+        
+        # Crop the image
+        image = image.crop((x0, y0, x1, y1))
 
     transform = build_transform(input_size=input_size)
     images = dynamic_preprocess(image, image_size=input_size, use_thumbnail=use_thumbnail, max_num=max_num)
