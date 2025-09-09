@@ -37,31 +37,37 @@ def find_label_files(base_path, label_id):
 
 def refine_content(content, img_name):
     """Refine the content"""
-    
-    # Correct incomplete <T tags to <T>
-    # Find all occurrences of <T that are not followed by >
-    content = re.sub(r'<T(?!>)', '<T>', content)
-    content = re.sub(r'</T(?!>)', '</T>', content)
-    content = re.sub(r'<A(?!>)', '<A>', content)
-    content = re.sub(r'</A(?!>)', '</A>', content)
 
-    answer = content.split("<A>")[-1]
-    answer, bbox = answer.split("</A>")[0].strip(), answer.split("</A>")[1].strip()
-    bbox = None if len(bbox) < 12 else bbox
-    # answer = answer[answer.find("[")+1:answer.find("]")]
-    answer = answer[answer.find("["):answer.rfind("]")+1]
-    answer = answer.strip()
-    answer = json.loads(answer)
-    if len(answer) > 1:
-        print(f" - Data Key: {img_name} has {len(answer)} defects. Using the first one only.")
-        answer = answer[0]
+    think = content[:content.find("</think>") + len("</think>")].strip()
+    if len(think) <= 20:
+        print(f" - Data Key: {img_name} has invalid think: {think}")
+        return None, None
+    if len(think) > 2600:
+        print(f" - Data Key: {img_name} has invalid think of too long.")
+        return None, None
+    answer = content.split("</think>")[-1]
+    if answer.strip().split("\n")[-1].strip().startswith("[") and answer.strip().split("\n")[-1].strip().endswith("]"):
+        # if the last line is a list, remove the last line. The last line is bbox.
+        bbox = answer.strip().split("\n")[-1].strip()
+        answer = "\n".join(answer.strip().split("\n")[:-1])
+    else:
+        answer = answer.strip()
+        bbox = None
+    answer = answer[answer.find("{"):answer.find("}")+1]
+    try:
+        answer = json.loads(answer)
+    except json.decoder.JSONDecodeError:
+        print(f" - Data Key: {img_name} has invalid answer: {answer}")
+        return None, None
+    if len(answer) != 7 and len(answer) != 3:
+        print(f" - Data Key: {img_name} has {len(answer)} defects. {answer}")
 
-    content = content[:content.find("<A>")].strip() + "\n" + json.dumps(answer, indent=1)
+    if bbox and len(bbox) < 12:
+        # alert the user
+        print(f" - Data Key: {img_name} has invalid bbox: {bbox}")
+        bbox = None if len(bbox) < 12 else bbox
 
-    content = content.replace("<T>", "<think>")
-    content = content.replace("</T>", "</think>")
-    content = content.replace("<A>", "<answer>")
-    content = content.replace("</A>", "</answer>")
+    content = think + "\n" + json.dumps(answer, ensure_ascii=False, indent=1)
     
     return content, bbox
 
@@ -70,7 +76,7 @@ if __name__ == "__main__":
     data_root = "/home/Theo-Yim/data/lh-poc/" # "/mnt/nas1/data/lh-poc/"
     # image_root = "/mnt/nas1/data/lh-poc/lh-data-image/image/20250722"
 
-    output_path = "/workspace/VLMs/utils/lh-poc/training_dataset.json"
+    output_path = "/workspace/VLMs/utils/lh-poc/dataset_lh_sb_train.json"
     output_list = []
 
     # Load dataset
@@ -95,6 +101,9 @@ if __name__ == "__main__":
             content = f.read()
         content, _ = refine_content(content, img_name)
 
+        if content is None:
+            continue
+
         # for file_path in found_files:
         #     print(f"Found: {file_path}")
 
@@ -118,6 +127,8 @@ if __name__ == "__main__":
             with open(found_files[1], "r") as f:
                 content = f.read()
                 content, bbox = refine_content(content, img_name)
+                if content is None:
+                    continue
                 obj["bbox(xyxy)"] = bbox
                 obj["conversations"][1]["value"] = content
                 output_list.append(obj)

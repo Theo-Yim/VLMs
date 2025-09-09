@@ -61,7 +61,7 @@ class ConversationBboxDataset(MultimodalDataset):
                 # Random crop using bbox coordinates
                 if 'bbox(xyxy)' in sample and image is not None:
                     img_width, img_height = image.size
-                    bbox_xyxy = sample['bbox(xyxy)']
+                    bbox_xyxy = eval(sample['bbox(xyxy)'])
                     
                     # Generate random crop coordinates
                     # x0: random between 0 and bbox[0]

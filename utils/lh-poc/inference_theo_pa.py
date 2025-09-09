@@ -72,6 +72,12 @@ def main():
         default="/mnt/nas1/data/lh-poc/",
         help="Path to label data root",
     )
+    parser.add_argument(
+        "--data_type",
+        type=str,
+        default="train",
+        help="Type of data to process",
+    )
     # parser.add_argument(
     #     "--image_root",
     #     type=str,
@@ -132,7 +138,7 @@ def main():
 
     # Load dataset
     print(f"Process {args.process_id}: Loading data...")
-    loader = LHDataLoader(args.data_root, type="train")
+    loader = LHDataLoader(args.data_root, type=args.data_type)
     total_items = len(loader)
 
     # Calculate data slice for this process

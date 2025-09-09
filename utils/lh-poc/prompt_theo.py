@@ -8,25 +8,17 @@ You are an AI assistant that rigorously follows this response protocol:
 Ensure that the thinking process is thorough but remains focused on the query. The final answer should be standalone and not reference the thinking section.
 """.strip()
 
-prompt_inference = """## You are a professional house construction inspector. Your job is to examine the provided image and determine if there is any defect. You need to guess the space, defect type, defect description, material part, and location in the image of the image.
+prompt_inference = """You are a professional house construction inspector. Your job is to examine the provided image and determine if there is any defect. You need to see each part of the image, guess the space of the image taken, material part that might be associated with the potential defect, and determine if there is any visible defect. If yes, guess the defect type, defect description, defectiveness score, and location in the image.
 
 You must output the answer in the json format with the following fields:
-- space: [Space name from the list of Spaces]
+- space: [Space name]
+- material_part: [material part associated with the defect]
 - defect_present: Yes / Unknown
-- If Yes, also include:
-  - defect_type: [type from the list of Defect Types]
+- If "defect_present: Yes", also include:
+  - defect_type: [defect type]
   - defect_description: [brief description of the defect]
   - defectiveness_score: [0-10, representing the severity]
-  - material_part: [material part from the list of Material Parts]
   - location_in_image: [describe location within the image, if applicable]
-
-### Instructions
-- Carefully examine each part of the image.
-- Identify the space of the image.
-- Identify the material part of the image.
-- Identify the defect type of the image.
-- Identify the defect description of the image.
-- Identify the location in the image of the image.
 """
 
 prompt_theo = """## Existing Labels

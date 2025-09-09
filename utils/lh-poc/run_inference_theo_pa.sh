@@ -9,6 +9,7 @@ DATA_ROOT="/home/Theo-Yim/data/lh-poc/"
 RESULT_DIR="/workspace/VLMs/utils/lh-poc/results_theo_parallel"
 MODEL_PATH="OpenGVLab/InternVL3_5-38B"
 PYTHON_SCRIPT="inference_theo_pa.py"
+DATA_TYPE="train"
 
 export PYTHONPATH=/workspace/VLMs/:$PYTHONPATH
 
@@ -80,7 +81,7 @@ with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.St
 print(count)
 EOF
 
-TOTAL_ITEMS=`python3 /tmp/count_data.py "$DATA_ROOT" "train" 2>/dev/null | tail -1`
+TOTAL_ITEMS=`python3 /tmp/count_data.py "$DATA_ROOT" "$DATA_TYPE" 2>/dev/null | tail -1`
 rm /tmp/count_data.py
 
 echo "Total items: $TOTAL_ITEMS"
@@ -119,6 +120,7 @@ for gpu_id in $GPU_LIST; do
         --start_idx $start \
         --end_idx $end \
         --enable_thinking \
+        --data_type "$DATA_TYPE" \
         --process_id $process_id > "$RESULT_DIR/logs/process_$process_id.log" 2>&1 &
     
     echo "Started process $process_id on GPU $gpu_id (log: process_$process_id.log)"

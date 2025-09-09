@@ -31,7 +31,9 @@ def extract_label_information(annotation_data):
     }
 
     # Optimized: Use any() with generator expression for early exit
-    is_no_defect = any("NO(이미지 판단 불가)" in tag for tag in annotation_data["tags"])
+    # if "하자유형_check" or "NO(이미지 판단 불가)" in any tag in annotation_data["tags"], then is_no_defect is True
+    is_no_defect = any("하자유형_check" in tag or "NO(이미지 판단 불가)" in tag for tag in annotation_data["tags"])
+    # is_no_defect = any("NO(이미지 판단 불가)" in tag for tag in annotation_data["tags"])
 
     # Optimized: Cache label_data access and use more efficient property processing
     # label_data = annotation_data.get("label_data", {})
@@ -68,6 +70,12 @@ def main():
         type=str,
         default="/mnt/nas1/data/lh-poc/",
         help="Path to label data root",
+    )
+    parser.add_argument(
+        "--data_type",
+        type=str,
+        default="train",
+        help="Type of data to process",
     )
     # parser.add_argument(
     #     "--image_root",
@@ -110,7 +118,7 @@ def main():
     # Load pre-merged datasets
     # data_list = processor.load_datasets()
     print("Loading data...")
-    loader = LHDataLoader(args.data_root, type="train")
+    loader = LHDataLoader(args.data_root, type=args.data_type)
 
     print(f"Total items to process: {len(loader)}")
     if args.limit:
@@ -181,7 +189,7 @@ def main():
             f.write(response + "\n" + str(bbox))
 
         processed_count += 1
-        if processed_count >= args.limit:
+        if args.limit and processed_count >= args.limit:
             break
 
     print(f"\nProcessed {processed_count} images")
