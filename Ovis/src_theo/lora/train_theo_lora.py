@@ -14,6 +14,7 @@ import torch
 from ovis.model.modeling_ovis2_5 import Ovis2_5
 
 # Import original Ovis training components
+from ovis.train.dataset.conversation_dataset import ConversationDataset
 from ovis.train.dataset.conversation_bbox_dataset import ConversationBboxDataset
 from ovis.train.dataset.multimodal_dataset import DataCollatorForMultimodalDataset
 from transformers import (

@@ -1,9 +1,8 @@
 import argparse
-from typing import List, Optional, Tuple
+import json
+from typing import Optional, Tuple
 
 import gradio as gr
-import moviepy as mp
-import numpy as np
 import PIL.Image
 import torch
 from ovis.model.modeling_ovis2_5 import Ovis2_5
@@ -23,83 +22,42 @@ def get_optimal_max_pixels() -> int:
             gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
             print(f"Detected GPU memory: {gpu_memory_gb:.1f} GB")
             # Set max_pixels based on GPU memory
-            if gpu_memory_gb >= 25:  # >24GB GPUs
-                max_pixels = 1792 * 1792 # 3211264
+            if gpu_memory_gb >= 21:  # >24GB GPUs
+                max_pixels = 1792 * 1792  # 3211264
                 print(f"Using max_pixels = 1792 * 1792 for high-memory GPU ({gpu_memory_gb:.1f}GB)")
-            elif gpu_memory_gb >= 21:  # ~24GB GPUs
-                max_pixels = 1168 * 1168 # 1364624
+            elif gpu_memory_gb >= 20:  # ~24GB GPUs
+                max_pixels = 1168 * 1168  # 1364624
                 print(f"Using max_pixels = 1168 * 1168 for 24GB GPU ({gpu_memory_gb:.1f}GB)")
-            else:  # ~20GB GPUs
-                max_pixels = 1024 * 1024 # 1048576
+            else:  # <20GB GPUs
+                max_pixels = 1024 * 1024  # 1048576
                 print(f"Using max_pixels = 1024 * 1024 for ~20GB GPU ({gpu_memory_gb:.1f}GB)")
             return max_pixels
         else:
             print("CUDA not available, using default max_pixels")
-            return 1792 * 1792 # 3211264
+            return 1792 * 1792  # 3211264
     except Exception as e:
         print(f"Error detecting GPU memory: {e}, using default max_pixels")
-        return 1792 * 1792 # 3211264
+        return 1792 * 1792  # 3211264
 
 
-def load_video_frames(
-    video_path: Optional[str], n_frames: int = 8
-) -> Optional[List[PIL.Image.Image]]:
-    """Extract a fixed number of frames from the video file."""
-    if not video_path:
-        return None
-    try:
-        with mp.VideoFileClip(video_path) as clip:
-            duration = clip.duration
-            if duration is None or clip.fps is None or duration <= 0 or clip.fps <= 0:
-                print(f"Warning: Unable to process video {video_path}. Invalid duration or fps.")
-                return None
-
-            total_possible_frames = int(duration * clip.fps)
-            num_to_extract = min(n_frames, total_possible_frames)
-
-            if num_to_extract <= 0:
-                print(
-                    f"Warning: Cannot extract frames from {video_path}. Computed extractable frames is zero."
-                )
-                return None
-
-            frames = []
-            timestamps = np.linspace(0, duration, num_to_extract, endpoint=True)
-            for t in timestamps:
-                frame_np = clip.get_frame(t)
-                frames.append(PIL.Image.fromarray(frame_np))
-        print(f"Successfully extracted {len(frames)} frames from {video_path}.")
-        return frames
-    except Exception as e:
-        print(f"Error processing video {video_path}: {e}")
-        return None
-
-
-def run_single_model(
+def run_single_model_internal(
     image_input: Optional[PIL.Image.Image],
-    video_input: Optional[str],
     prompt: str,
     do_sample: bool,
-    max_new_tokens: int,
     enable_thinking: bool,
 ) -> str:
     """Run single model inference using the chat method."""
-    if not prompt and not image_input and not video_input:
-        gr.Warning("Please enter a prompt, upload an image, or upload a video.")
+    max_new_tokens = 2048
+
+    if not image_input:
+        gr.Warning("Please upload an image.")
         return ""
 
     # Prepare vision inputs
     images = [image_input] if image_input else None
-    video_frames = load_video_frames(video_input)
-    videos = [video_frames] if video_frames else None
-
-    # Check for conflicting inputs
-    if images and videos:
-        gr.Warning("Please provide either an image or a video, not both.")
-        return ""
 
     if not enable_thinking:
-        prompt = prompt + "\nEnd your response with 'Final answer: '."
+        prompt = prompt + "\nEnd your response with 'Final answer: ', followed by the json object."
     try:
         # Check if model has custom chat method (for custom checkpoints)
         if hasattr(model, "chat"):
@@ -108,7 +66,7 @@ def run_single_model(
                 prompt=prompt,
                 history=None,  # Always start a new conversation
                 images=images,
-                videos=videos,
+                videos=None,
                 do_sample=do_sample,
                 max_new_tokens=max_new_tokens,
                 temperature=0.6 if do_sample else 0.0,
@@ -119,11 +77,31 @@ def run_single_model(
 
             # Format output
             if enable_thinking and thinking:
-                return f"**Thinking:**\n```text\n{thinking}\n```\n\n**Response:**\n{response}"
+                # return f"**Thinking:**\n```text\n{thinking}\n```\n\n**Response:**\n{response}"
+                response = json.dumps(json.loads(response), indent=2, ensure_ascii=False)
+                response = (
+                    response.replace("space", "공간")
+                    .replace("defect_type", "하자유형")
+                    .replace("defect_description", "하자내용")
+                    .replace("material_part", "부위자재")
+                    .replace("location_in_image", "이미지 내 위치")
+                    .replace("defect_present", "하자 존재 여부")
+                )
+                return f"**Response:**\n```json\n{response}\n```"
             else:
-                thinking = response[:response.find("Final answer: ") + 13].strip()
-                response2 = response[response.find("Final answer: ") + 13:].strip()
-                return f"**Pseudo Thinking (CoT):**\n```text\n{thinking}\n```\n\n**Response:**\n{response2}"
+                thinking = response[: response.find("Final answer: ") + 13].strip()
+                response2 = response[response.find("Final answer: ") + 13 :].strip()
+                response2 = json.dumps(json.loads(response2), indent=2, ensure_ascii=False)
+                response2 = (
+                    response2.replace("space", "공간")
+                    .replace("defect_type", "하자유형")
+                    .replace("defect_description", "하자내용")
+                    .replace("material_part", "부위자재")
+                    .replace("location_in_image", "이미지 내 위치")
+                    .replace("defect_present", "하자 존재 여부")
+                )
+                # return f"**Pseudo Thinking (CoT):**\n```text\n{thinking}\n```\n\n**Response:**\n```json\n{response2}\n```"
+                return f"**Response:**\n```json\n{response2}\n```"
             # return response
 
         else:
@@ -135,16 +113,6 @@ def run_single_model(
                         "role": "user",
                         "content": [
                             {"type": "image", "image": images[0]},
-                            {"type": "text", "text": prompt},
-                        ],
-                    }
-                ]
-            elif videos:
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "video", "video": videos[0]},
                             {"type": "text", "text": prompt},
                         ],
                     }
@@ -194,32 +162,44 @@ def run_single_model(
                 thinking = response_text[thinking_start:thinking_end].strip()
                 response = response_text[thinking_end + 8 :].strip()
 
-                return f"**Thinking:**\n```text\n{thinking}\n```\n\n**Response:**\n{response}"
+                # return f"**Thinking:**\n```text\n{thinking}\n```\n\n**Response:**\n{response}"
+                response = (
+                    response.replace("space", "공간")
+                    .replace("defect_type", "하자유형")
+                    .replace("defect_description", "하자내용")
+                    .replace("material_part", "부위자재")
+                    .replace("location_in_image", "이미지 내 위치")
+                    .replace("defect_present", "하자 존재 여부")
+                )
+                response = json.dumps(json.loads(response), indent=2, ensure_ascii=False)
+                return f"**Response:**\n```json\n{response}\n```"
             else:
                 # Clean up the response by removing any system tokens
                 response = (
                     response_text.replace("<|im_start|>", "").replace("<|im_end|>", "").strip()
                 )
-                thinking = response[:response.find("Final answer: ") + 13].strip()
-                response2 = response[response.find("Final answer: ") + 13:].strip()
-                return f"**Pseudo Thinking (CoT):**\n```text\n{thinking}\n```\n\n**Response:**\n{response2}"
+                thinking = response[: response.find("Final answer: ") + 13].strip()
+                response2 = response[response.find("Final answer: ") + 13 :].strip()
+                response2 = json.dumps(json.loads(response2), indent=2, ensure_ascii=False)
+                response2 = (
+                    response2.replace("space", "공간")
+                    .replace("defect_type", "하자유형")
+                    .replace("defect_description", "하자내용")
+                    .replace("material_part", "부위자재")
+                    .replace("location_in_image", "이미지 내 위치")
+                    .replace("defect_present", "하자 존재 여부")
+                )
+                # return f"**Pseudo Thinking (CoT):**\n```text\n{thinking}\n```\n\n**Response:**\n```json\n{response2}\n```"
+                return f"**Response:**\n```json\n{response2}\n```"
 
     except Exception as e:
         gr.Warning(f"Error during inference: {str(e)}")
         return f"Error: {str(e)}"
 
 
-def toggle_media_input(choice: str) -> Tuple[gr.update, gr.update]:
-    """Toggle visibility of image and video input components."""
-    if choice == "Image":
-        return gr.update(visible=True, value=None), gr.update(visible=False, value=None)
-    else:
-        return gr.update(visible=False, value=None), gr.update(visible=True, value=None)
-
-
-def clear_interface() -> Tuple[str, None, None, str, str]:
+def clear_interface() -> Tuple[str, None]:
     """Reset all inputs and outputs."""
-    return "", None, None, "", "Image"
+    return "", None
 
 
 def start_generation() -> Tuple[gr.update, gr.update, gr.update]:
@@ -239,6 +219,14 @@ def finish_generation() -> Tuple[gr.update, gr.update]:
 def build_demo(model_path: str, gpu: int):
     """Build single-model Gradio demo interface."""
     global model, optimal_max_pixels
+
+    # Define the prompt as a constant
+    prompt_input = "<image>\n## You are a professional house construction inspector. Your job is to examine the provided image and determine if there is any defect. You need to guess the space, defect type, defect description, material part, and location in the image of the image.\n\nYou must output the answer in the json format with the following fields:\n- space: [Space name from the list of Spaces]\n- defect_present: Yes / No\n- If Yes, also include:\n  - defect_type: [type from the list of Defect Types]\n  - defect_description: [brief description of the defect]\n  - material_part: [material part from the list of Material Parts]\n  - location_in_image: [describe location within the image, if applicable]\n\n### Instructions\n- Carefully examine each part of the image.\n- Identify the space of the image.\n- Identify the material part of the image.\n- Identify the defect type of the image.\n- Identify the defect description of the image.\n- Identify the location in the image of the image.\n"
+
+    # Create a wrapper function that uses the constant prompt
+    def run_model_with_prompt(image_input: Optional[PIL.Image.Image], do_sample: bool, enable_thinking: bool) -> str:
+        return run_single_model_internal(image_input, prompt_input, do_sample, enable_thinking)
+
     device = f"cuda:{gpu}"
     print(f"Loading model {model_path} to device {device}...")
 
@@ -268,35 +256,17 @@ def build_demo(model_path: str, gpu: int):
     }
     """
     with gr.Blocks(theme=gr.themes.Default(), css=custom_css) as demo:
-        gr.Markdown("# Ovis2.5 VLM Web UI")
-        gr.Markdown(
-            f"Running on **GPU {gpu}**. Each submission starts a new conversation."
-            + f"Due to memory constraints, setting max_pixels={optimal_max_pixels}"
-            if optimal_max_pixels < 1792 * 1792
-            else f"Running on **GPU {gpu}**."
-        )
+        gr.Markdown("# LH - 유지보수 유형 분석 by Superb AI")
 
         with gr.Row():
             # Left column - inputs
             with gr.Column(scale=1):
                 gr.Markdown("### Inputs")
-                input_type_radio = gr.Radio(
-                    choices=["Image", "Video"], value="Image", label="Select Input Type"
-                )
-                image_input = gr.Image(label="Image Input", type="pil", visible=True, height=400)
-                video_input = gr.Video(label="Video Input", visible=False)
-                prompt_input = gr.Textbox(
-                    label="Prompt",
-                    placeholder="Enter your prompt here... (Press Enter to submit)",
-                    value="<image>\n## You are a professional house construction inspector. Your job is to examine the provided image and determine if there is any defect. You need to guess the space, defect type, defect description, material part, and location in the image of the image.\n\nYou must output the answer in the json format with the following fields:\n- space: [Space name from the list of Spaces]\n- defect_present: Yes / No\n- If Yes, also include:\n  - defect_type: [type from the list of Defect Types]\n  - defect_description: [brief description of the defect]\n  - material_part: [material part from the list of Material Parts]\n  - location_in_image: [describe location within the image, if applicable]\n\n### Instructions\n- Carefully examine each part of the image.\n- Identify the space of the image.\n- Identify the material part of the image.\n- Identify the defect type of the image.\n- Identify the defect description of the image.\n- Identify the location in the image of the image.\n",
-                    lines=3,
-                )
+                image_input = gr.Image(label="Image Input", type="pil", height=400)
+
                 with gr.Accordion("Generation Settings", open=True):
                     do_sample = gr.Checkbox(label="Enable Sampling (Do Sample)", value=False)
-                    max_new_tokens = gr.Slider(
-                        minimum=1024, maximum=4192, value=2048, step=1024, label="Max New Tokens"
-                    )
-                    enable_thinking = gr.Checkbox(label="Deep Thinking", value=False)
+                    enable_thinking = gr.Checkbox(label="Deep Thinking", value=True)
 
                 with gr.Row():
                     clear_btn = gr.Button("Clear", variant="secondary", scale=1)
@@ -304,40 +274,26 @@ def build_demo(model_path: str, gpu: int):
 
             # Right column - output
             with gr.Column(scale=2):
-                model_name = model_path.strip().strip("/").split("/")[-1]
-                gr.Markdown(f"### Model Output\n`{model_name}`")
+                gr.Markdown("### Model Output\n")
                 output_display = gr.Markdown(elem_id="output_md")
 
         # Event handlers
-        input_type_radio.change(
-            fn=toggle_media_input, inputs=input_type_radio, outputs=[image_input, video_input]
-        )
-
         run_inputs = [
             image_input,
-            video_input,
-            prompt_input,
             do_sample,
-            max_new_tokens,
             enable_thinking,
         ]
 
         generate_btn.click(
             fn=start_generation, outputs=[generate_btn, clear_btn, output_display]
-        ).then(fn=run_single_model, inputs=run_inputs, outputs=[output_display]).then(
-            fn=finish_generation, outputs=[generate_btn, clear_btn]
-        )
-
-        prompt_input.submit(
-            fn=start_generation, outputs=[generate_btn, clear_btn, output_display]
-        ).then(fn=run_single_model, inputs=run_inputs, outputs=[output_display]).then(
+        ).then(fn=run_model_with_prompt, inputs=run_inputs, outputs=[output_display]).then(
             fn=finish_generation, outputs=[generate_btn, clear_btn]
         )
 
         clear_btn.click(
             fn=clear_interface,
-            outputs=[output_display, image_input, video_input, prompt_input, input_type_radio],
-        ).then(fn=toggle_media_input, inputs=input_type_radio, outputs=[image_input, video_input])
+            outputs=[output_display, image_input],
+        )
 
     return demo
 

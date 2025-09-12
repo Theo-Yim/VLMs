@@ -46,8 +46,14 @@ class MultimodalDataset(Dataset):
     def read_image(self, path):
         try:
             full_path = os.path.join(self.image_dir, path)
+            # Create a separate copy for each worker to avoid sharing PIL objects.
+            # This is due to cropping operation in conversation_bbox_dataset.py
             image = Image.open(full_path).convert('RGB')
-            return image, None
+            # Force load into memory and create a copy to avoid file handle sharing
+            image.load()  # Load image data into memory
+            image_copy = image.copy()  # Create independent copy
+            image.close()  # Close original file handle
+            return image_copy, None
         except Exception as e:
             return None, e
 

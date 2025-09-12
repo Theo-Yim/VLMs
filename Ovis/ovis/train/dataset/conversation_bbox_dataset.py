@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict
 
 import torch
+from PIL import Image
 
 from ovis.train.dataset.multimodal_dataset import MultimodalDataset
 from ovis.util.constants import IGNORE_ID
@@ -57,31 +58,47 @@ class ConversationBboxDataset(MultimodalDataset):
                 image_paths = [image_paths]
             for image_path in image_paths:
                 image, last_e = self.read_image(image_path)
-                
+
                 # Random crop using bbox coordinates
-                if 'bbox(xyxy)' in sample and image is not None:
+                if "bbox(xyxy)" in sample and image is not None:
                     img_width, img_height = image.size
-                    bbox_xyxy = eval(sample['bbox(xyxy)'])
-                    
-                    # Generate random crop coordinates
-                    # x0: random between 0 and bbox[0]
-                    x0 = bbox_xyxy[0] # random.randint(0, max(0, int(bbox_xyxy[0])))
-                    # y0: random between 0 and bbox[1] 
-                    y0 = bbox_xyxy[1] # random.randint(0, max(0, int(bbox_xyxy[1])))
-                    # x1: random between bbox[2] and img_width
-                    x1 = bbox_xyxy[2] # random.randint(min(img_width, int(bbox_xyxy[2])), img_width)
-                    # y1: random between bbox[3] and img_height
-                    y1 = bbox_xyxy[3] # random.randint(min(img_height, int(bbox_xyxy[3])), img_height)
-                    
-                    # Ensure valid crop coordinates
-                    x0 = max(0, min(x0, img_width - 1))
-                    y0 = max(0, min(y0, img_height - 1))
-                    x1 = max(x0 + 1, min(x1, img_width))
-                    y1 = max(y0 + 1, min(y1, img_height))
-                    
-                    # Crop the image
-                    image = image.crop((x0, y0, x1, y1))
-                
+                    # Safely parse bbox coordinates
+                    if isinstance(sample["bbox(xyxy)"], str):
+                        bbox_xyxy = json.loads(sample["bbox(xyxy)"])
+                    else:
+                        bbox_xyxy = sample["bbox(xyxy)"]
+                    # Convert to integers and ensure valid coordinates
+                    x0 = max(0, min(int(float(bbox_xyxy[0])), img_width - 1))
+                    y0 = max(0, min(int(float(bbox_xyxy[1]) + 0.5), img_height - 1))
+                    x1 = max(x0 + 1, min(int(float(bbox_xyxy[2])), img_width))
+                    y1 = max(y0 + 1, min(int(float(bbox_xyxy[3]) + 0.5), img_height))
+
+                    # Validate crop dimensions
+                    if x1 > x0 and y1 > y0 and (x1 - x0) >= 10 and (y1 - y0) >= 10:
+                        # Crop the image directly (read_image already provided independent copy)
+                        cropped_image = image.crop((x0, y0, x1, y1))
+                        # Ensure RGB mode and create a fresh copy
+                        if cropped_image.mode != "RGB":
+                            cropped_image = cropped_image.convert("RGB")
+
+                        # Force load into memory and create final copy
+                        cropped_image.load()
+                        final_image = Image.new("RGB", cropped_image.size)
+                        final_image.paste(cropped_image)
+                        # Close intermediate image
+                        cropped_image.close()
+                        image = final_image
+                    else:
+                        # Invalid crop dimensions, keep original image
+                        logging.warning(
+                            f"Invalid bbox for cropping: {bbox_xyxy}, keeping original image"
+                        )
+                    # except (ValueError, TypeError, KeyError, json.JSONDecodeError) as e:
+                    #     # If bbox parsing or cropping fails, keep original image
+                    #     logging.warning(
+                    #         f"Failed to crop image with bbox {sample.get('bbox(xyxy)', 'N/A')}: {e}"
+                    #     )
+
                 assert image is not None, f"Failed to read image from {image_path}"
                 images.append(image)
             n_image_or_frame = len(images)

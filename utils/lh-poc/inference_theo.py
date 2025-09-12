@@ -5,11 +5,12 @@ Compared to refcoco_main2.py, this version:
 """
 
 import argparse
+import gc
 import os
 
 import torch
 from dataloader import LHDataLoader
-from prompt_theo import defect_types, material_parts, prompt_theo, spaces, R1_SYSTEM_PROMPT
+from prompt_theo import defect_types, material_parts, spaces, R1_SYSTEM_PROMPT, prompt_theo_sync_w_R1
 from prompt_sb import ENGLISH_TRAIN_PROMPT
 from tqdm import tqdm
 
@@ -110,24 +111,22 @@ def main():
     # Create result directory
     os.makedirs(args.result_dir, exist_ok=True)
 
-    # processor = RefCOCOProcessor(model_path="OpenGVLab/InternVL3_5-38B")
     model, tokenizer = load_models(args.model_path, device_map=f"cuda:{args.gpu_id}" if args.gpu_id != -1 else None)
     if args.enable_thinking:
         model.system_message = R1_SYSTEM_PROMPT
 
-    # Load pre-merged datasets
-    # data_list = processor.load_datasets()
+    # Load dataset
     print("Loading data...")
     loader = LHDataLoader(args.data_root, type=args.data_type)
 
     print(f"Total items to process: {len(loader)}")
+    # Apply limit if specified
     if args.limit:
         print(f"Limited to first {args.limit} items")
 
     processed_count = 0
+    error_count = 0
     for idx, item in enumerate(tqdm(loader, desc="Processing images")):
-        if args.limit and idx >= args.limit:
-            break
 
         # Get metadata
         data_key = item["label_id"]
@@ -140,19 +139,23 @@ def main():
 
         # Get image path
         image_path = os.path.join(loader.image_path, data_key + ".jpg")
+        if not os.path.exists(image_path):
+            print(f"Warning - Image not found: {image_path}")
+            error_count += 1
+            continue
         pixels = load_image(image_path, max_num=12).to(torch.bfloat16).to(f"cuda:{args.gpu_id}" if args.gpu_id != -1 else "cuda:0")
 
         # Extract existing label information
         existing_labels = extract_label_information(item["annotation_data"])
 
-        prompt_sb = True
+        prompt_sb = False
         if not prompt_sb:
-            prompt_1 = prompt_theo.format(
+            prompt_1 = prompt_theo_sync_w_R1.format(
                 spaces=spaces,
                 material_parts=material_parts,
                 defect_types=defect_types,
-                    existing_labels=existing_labels,
-                )
+                existing_labels=existing_labels,
+            )
         else:
             prompt_1 = f"### Existing Label:\n{existing_labels}" + ENGLISH_TRAIN_PROMPT
 
@@ -165,11 +168,6 @@ def main():
         # Run inference
         with torch.inference_mode():
             response = model.chat(tokenizer, pixels, prompt_1, generation_config)
-        # response = inference_engine.inference_single_image(
-        #     image_path,
-        #     "",  # Using the main prompt from prompt.py (referred to as prompt_theo)
-        #     existing_labels
-        # )
 
         # Save result
         with open(result_path, "w", encoding="utf-8") as f:
@@ -192,7 +190,13 @@ def main():
         if args.limit and processed_count >= args.limit:
             break
 
+        # Clean up GPU memory
+        del pixels
+        torch.cuda.empty_cache()
+        gc.collect()
+
     print(f"\nProcessed {processed_count} images")
+    print(f"\nEncountered {error_count} errors")
 
 
 if __name__ == "__main__":

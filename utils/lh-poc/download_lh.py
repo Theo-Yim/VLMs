@@ -6,8 +6,8 @@ from tqdm import tqdm
 
 rerun = True
 type = "train"
-image_dir = f"/home/Theo-Yim/data/lh-poc/lh-data-image-{type}/"
-annotation_dir = f"/home/Theo-Yim/data/lh-poc/lh-data-annotation-{type}/"
+image_dir = f"/workspace/data/lh-poc/lh-data-image-{type}/"
+annotation_dir = f"/workspace/data/lh-poc/lh-data-annotation-{type}/"
 os.makedirs(image_dir, exist_ok=True)
 os.makedirs(annotation_dir, exist_ok=True)
 

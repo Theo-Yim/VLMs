@@ -12,7 +12,7 @@ import os
 
 import torch
 from dataloader import LHDataLoader
-from prompt_theo import defect_types, material_parts, prompt_theo, spaces, R1_SYSTEM_PROMPT
+from prompt_theo import defect_types, material_parts, spaces, R1_SYSTEM_PROMPT, prompt_theo_sync_w_R1
 from prompt_sb import ENGLISH_TRAIN_PROMPT
 from tqdm import tqdm
 
@@ -34,7 +34,9 @@ def extract_label_information(annotation_data):
     }
 
     # Optimized: Use any() with generator expression for early exit
-    is_no_defect = any("NO(이미지 판단 불가)" in tag for tag in annotation_data["tags"])
+    # if "하자유형_check" or "NO(이미지 판단 불가)" in any tag in annotation_data["tags"], then is_no_defect is True
+    is_no_defect = any("하자유형_check" in tag or "NO(이미지 판단 불가)" in tag for tag in annotation_data["tags"])
+    # is_no_defect = any("NO(이미지 판단 불가)" in tag for tag in annotation_data["tags"])
 
     # Optimized: Cache label_data access and use more efficient property processing
     # label_data = annotation_data.get("label_data", {})
@@ -127,12 +129,9 @@ def main():
     # Create result directory with process-specific subdirectory
     process_result_dir = os.path.join(args.result_dir, f"process_{args.process_id}")
     os.makedirs(process_result_dir, exist_ok=True)
-    print(f"Process {args.process_id}: Results will be saved to {process_result_dir}")
 
-    # Load model on the assigned GPU (now GPU 0 from CUDA_VISIBLE_DEVICES perspective)
     device_map = f"cuda:0"  # Always 0 since we set CUDA_VISIBLE_DEVICES
     model, tokenizer = load_models(args.model_path, device_map=device_map)
-    print(f"Process {args.process_id}: Model loaded successfully")
     if args.enable_thinking:
         model.system_message = R1_SYSTEM_PROMPT
 
@@ -168,8 +167,6 @@ def main():
 
     processed_count = 0
     error_count = 0
-
-    # Process only the assigned slice
     for idx in tqdm(
         range(args.start_idx, args.end_idx),
         desc=f"Process {args.process_id}",
@@ -198,9 +195,9 @@ def main():
         # Extract existing label information
         existing_labels = extract_label_information(item["annotation_data"])
 
-        prompt_sb = True
+        prompt_sb = False
         if not prompt_sb:
-            prompt_1 = prompt_theo.format(
+            prompt_1 = prompt_theo_sync_w_R1.format(
                 spaces=spaces,
                 material_parts=material_parts,
                 defect_types=defect_types,
@@ -244,7 +241,6 @@ def main():
         torch.cuda.empty_cache()
         gc.collect()
 
-    print(f"Process {args.process_id}: Completed!")
     print(f"Process {args.process_id}: Processed {processed_count} images successfully")
     print(f"Process {args.process_id}: Encountered {error_count} errors")
 
