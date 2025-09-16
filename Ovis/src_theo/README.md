@@ -1,366 +1,180 @@
-# Ovis2.5 Custom Training & Inference - src_theo
+# Ovis2.5 Training & Inference Framework
 
-This folder contains a complete implementation for fine-tuning and inference with Ovis2.5 multimodal models, based on the original Ovis2.5 framework with custom modeling.
+Enhanced training and inference framework for Ovis2.5 multimodal models with DeepSpeed support, evaluation datasets, early stopping, and reflective reasoning capabilities.
 
-## Features
+## Overview
 
-- **Fine-tuning**: Complete training pipeline using original Ovis framework components
-- **Inference**: Support for single/multi-image, video, text-only, and grounding tasks
-- **Thinking Mode**: Support for reflective reasoning with budget control
-- **Custom Implementation**: Uses custom Ovis2.5 modeling with original training framework
-- **Original Dataset**: Leverages tested `ConversationDataset` from Ovis framework
+Comprehensive training pipeline with enhanced features not available in the base framework:
 
-## Installation
+1. **train_theo.py**: Standard Trainer with evaluation dataset support and early stopping
+2. **train_theo_trl.py**: TRL SFTTrainer version with advanced training features  
+3. **lora/**: LoRA fine-tuning implementation with PEFT integration
+4. **utils/**: Cropping tool functionality (work in progress)
+5. **train_launch.sh**: DeepSpeed launcher with multi-GPU support
 
-```bash
-# Core dependencies
-pip install torch transformer numpy pillow moviepy
-pip install flash-attn">=2.7.0.post2" --no-build-isolation
+## Usage
 
-# Additional training dependencies
-pip install deepspeed accelerate wandb
-
-# Ensure the Ovis framework is available in your Python path
-# The training script imports from ovis.train.dataset
-```
-
-**Note**: Make sure the original Ovis framework is properly installed and accessible, as the training script uses `ConversationDataset` and `DataCollatorForMultimodalDataset` from the original implementation.
-
-## Quick Start
-
-### 0. Default Parameters
+### Step 1: Standard Training
+Full model fine-tuning with evaluation support:
 
 ```bash
-# Model configuration (original Ovis structure)
-LLM_MODEL="Qwen/Qwen3-8B"  # or "microsoft/DialoGPT-medium"
-VIT_MODEL="google/siglip2-so400m-patch16-512"
-OVIS25_MODEL="AIDC-AI/Ovis2.5-9B"
+# Basic single GPU training
+./train_launch.sh ./train_config.json 1
 
-# Training parameters (original defaults)
-MULTIMODAL_MAX_LENGTH=8192  # Original default
-TEXT_MAX_LENGTH=4096
-
-# Inference parameters - Thinking mode & budget
-enable_thinking = True  # either True or False
-enable_thinking_budget = True  # Only effective if enable_thinking is True.
-# Inference parameters
-max_new_tokens=1024 if enable_thinking is False else 3096
-thinking_budget=2048
-
-# Image processing (original Ovis defaults)
-SINGLE_IMAGE_MIN_PIXELS=200704  # 448*448
-SINGLE_IMAGE_MAX_PIXELS=3211264 # 1792*1792
-MULTIPLE_IMAGE_MIN_PIXELS=200704 # 448*448  
-MULTIPLE_IMAGE_MAX_PIXELS=802816 # 896*896
-VIDEO_MAX_PIXELS=802816 # 896*896
+# Multi-GPU training with DeepSpeed
+./train_launch.sh ./train_config.json 4
 ```
 
-### 1. Inference
+### Step 2: TRL Training
+SFTTrainer-based training with advanced features:
 
+```bash
+./train_launch.sh ./train_config.json 2 trl
+```
+
+### Step 3: LoRA Training
+Parameter-efficient fine-tuning:
+
+```bash
+cd lora/
+./train_launch_lora.sh ./train_config_lora.json 1
+```
+
+### Step 4: Inference
 ```python
-from src_theo.inference_ovis25 import Ovis25Inference
+from inference_ovis25 import Ovis25Inference
 
-# Initialize model
-ovis = Ovis25Inference(model_path="AIDC-AI/Ovis2.5-9B")
-
-# Single image inference
+ovis = Ovis25Inference("AIDC-AI/Ovis2.5-9B")
 response = ovis.single_image_inference(
-    image_input="path/to/image.jpg",
-    text_prompt="Describe this image in detail.",
-    enable_thinking=True,
-    thinking_budget=2048,
-    max_new_tokens=3072
+    "image.jpg", 
+    "Describe this image",
+    enable_thinking=True
 )
-print(response)
 ```
-
-### 2. Fine-tuning
-
-```bash
-# Prepare your data in the conversation format (see Data Format section)
-# The training uses original Ovis ConversationDataset and DataCollatorForMultimodalDataset
-# Configure training parameters in config/train_config.json
-# Run training
-./run_training.sh config/train_config.json
-```
-
-**Note**: This implementation uses the original `ConversationDataset` from `ovis.train.dataset.conversation_dataset` and `DataCollatorForMultimodalDataset` from `ovis.train.dataset.multimodal_dataset` for maximum compatibility and reliability.
 
 ## Data Format
 
-### Conversation Dataset Format
-
+### Training Dataset
 ```json
 {
+  "id": "sample_001",
+  "image": "image.jpg",
   "conversations": [
-    {
-      "id": "sample_001",
-      "image": "cat_on_table.jpg",
-      "conversations": [
-        {
-          "from": "human",
-          "value": "<image>\nWhat do you see in this image?"
-        },
-        {
-          "from": "gpt",
-          "value": "I see a beautiful orange tabby cat sitting on a wooden table..."
-        }
-      ]
-    },
-    {
-      "id": "sample_002_thinking",
-      "image": "math_equation.jpg", 
-      "conversations": [
-        {
-          "from": "human",
-          "value": "<image>\nSolve this equation step by step."
-        },
-        {
-          "from": "gpt",
-          "value": "<think>\nLet me analyze this equation carefully...\n</think>\n\nTo solve this equation: [solution steps]"
-        }
-      ]
-    },
-    {
-      "id": "sample_003_multi_image",
-      "image": ["image1.jpg", "image2.jpg", "image3.jpg"],
-      "conversations": [
-        {
-          "from": "human", 
-          "value": "<image>\n<image>\n<image>\nCompare these images."
-        },
-        {
-          "from": "gpt",
-          "value": "Looking at these three images, I can see..."
-        }
-      ]
-    },
-    {
-      "id": "sample_004_video",
-      "video": ["frame1.jpg", "frame2.jpg", "frame3.jpg", "frame4.jpg"],
-      "conversations": [
-        {
-          "from": "human",
-          "value": "<video>\nDescribe what happens in this video."
-        },
-        {
-          "from": "gpt", 
-          "value": "This video sequence shows..."
-        }
-      ]
-    }
+    {"from": "human", "value": "<image>\nWhat's in this image?"},
+    {"from": "gpt", "value": "This image shows..."}
   ]
+}
+```
+
+### Thinking Mode Training
+```json
+{
+  "from": "gpt", 
+  "value": "<think>\nLet me analyze this step by step...\n</think>\n\nThe answer is..."
 }
 ```
 
 ## Configuration
 
-### Training Configuration (`src_theo/train_config.json`)
-
+### Key Training Parameters
 ```json
 {
   "model_path": "AIDC-AI/Ovis2.5-9B",
-  "data_name": "custom_data",
-  "data_type": "conversation",
-  "data_path": "./data/train_data.json",
-  "image_folder": "./data/images",
+  "data_path": "./sample_data/train_data.json", 
+  "eval_data_path": "./sample_data/eval_data.json",
   "output_dir": "./checkpoints/ovis25_finetune",
+  "deepspeed": "./scripts/zero_configs/zero2_cp.json",
   
   "num_train_epochs": 3,
   "per_device_train_batch_size": 1,
-  "gradient_accumulation_steps": 8,
+  "gradient_accumulation_steps": 16,
   "learning_rate": 2e-5,
   
   "train_modules": "all",
-  "freeze_vision_tower": false,
-  "freeze_llm": false,
-  
-  "ovis_pretrained_path": "AIDC-AI/Ovis2.5-9B",
-  "stage": 3,
   "multimodal_max_length": 8192,
-  "text_max_length": 4096,
-  "single_image_max_pixels": 3211264,
-  "multiple_image_max_pixels": 802816
+  "single_image_max_pixels": 3211264
 }
 ```
 
-### Key Parameters
+### Enhanced Features
+- **Automatic step calculation** based on dataset size
+- **Early stopping** with evaluation dataset support  
+- **DeepSpeed integration** with official zero configs
+- **Evaluation dataset loading** with proper error handling
+- **Multi-GPU support** with torchrun
 
-| Parameter | Description | Options |
-|-----------|-------------|---------|
-| `data_name` | Dataset identifier | Any string identifier |
-| `data_type` | Data format type | `"conversation"` |
-| `train_modules` | Which modules to train | `"all"`, `"llm"`, `"visual_tokenizer"`, `"vte"` |
-| `stage` | Training stage | `3` for full training |
-| `multimodal_max_length` | Max sequence length with vision | `8192` (recommended) |
-| `text_max_length` | Max sequence length text-only | `4096` (recommended) |
-| `freeze_vision_tower` | Freeze vision encoder | `true`/`false` |
-| `freeze_llm` | Freeze language model | `true`/`false` |
-| `*_max_pixels` | Image resolution limits | Adjust based on GPU memory |
+## File Structure
 
-## Advanced Usage
+```
+scripts/
+├── run_ovis2_5_sft.sh
+└── zero_configs/
+    ├── zero0_cp.json         # ZeRO-0 (No Optimization)
+    ├── zero1_cp.json         # ZeRO-1 (optimizer state sharding)
+    ├── zero2_cp.json         # ZeRO-2 (optimizer + gradient sharding) 
+    └── zero3_cp.json         # ZeRO-3 (full parameter sharding)
 
-### 1. Selective Module Training
-
-```json
-{
-  "train_modules": "vte",
-  "freeze_vision_tower": true,
-  "freeze_llm": true
-}
+src_theo/
+├── README.md                  # This file
+├── train_theo.py              # Standard Trainer with evaluation support
+├── train_theo_trl.py          # TRL SFTTrainer version  
+├── inference_ovis25.py        # Inference with thinking mode support
+├── train_config.json          # Main training configuration
+├── train_launch.sh            # DeepSpeed launcher script
+├── sample_data/               # Sample data
+│   └── data_example.json      # Sample data (not real data)
+│   └── train_data.json        # Sample data using sample_small.png
+├── lora/                      # LoRA fine-tuning implementation
+│   ├── train_theo_lora.py     # LoRA training script
+│   ├── train_config_lora.json # LoRA configuration
+│   └── train_launch_lora.sh   # LoRA launcher
+│   └── merge_lora_adapters.py # LoRA merging utility
+└── tools/                     # Tool-related functionality (WIP)
+    └── crop_tool.py           # Image cropping utilities
 ```
 
-### 2. Multi-GPU Training
+## Additional Information about ZeRO Configs
+
+### DeepSpeed ZeRO Optimization Stages
+
+| Stage | Memory Optimization | Communication | Best for |
+|-------|-------------------|---------------|----------|
+| **ZeRO-0** | No sharding | Minimal | Small models, abundant memory |
+| **ZeRO-1** | Optimizer states sharded | Low | Medium models, optimizer bottleneck |
+| **ZeRO-2** | Optimizer + gradients sharded | Balanced | **Recommended for Ovis2.5-9B** |
+| **ZeRO-3** | Full parameter sharding | High | Very large models, limited memory |
+
+### Memory Reduction vs Baseline
+
+- **ZeRO-0**: 1x (baseline) - Full replication
+- **ZeRO-1**: ~4x reduction - Optimizer sharding only
+- **ZeRO-2**: ~8x reduction - Optimizer + gradient sharding  
+- **ZeRO-3**: Nx reduction - Complete parameter sharding
+
+### Configuration Selection
 
 ```bash
-# Using accelerate
-accelerate launch src_theo/train_theo.py config/train_config.json
+# For Ovis2.5-2B (recommended)
+"deepspeed": "./scripts/zero_configs/zero1_cp.json"
 
-# Using torchrun  
-torchrun --nproc_per_node=4 src_theo/train_theo.py config/train_config.json
+# For Ovis2.5-9B (current default)
+"deepspeed": "./scripts/zero_configs/zero2_cp.json"
+
+# For memory-constrained setups
+"deepspeed": "./scripts/zero_configs/zero3_cp.json"
+
+# For small-scale experiments
+"deepspeed": "./scripts/zero_configs/zero0_cp.json"
 ```
 
-### 3. DeepSpeed Integration
+### Performance Trade-offs
 
-```json
-{
-  "deepspeed": "config/deepspeed_config.json",
-  "per_device_train_batch_size": 1,
-  "gradient_accumulation_steps": 16
-}
-```
+- **ZeRO-0/1**: Fastest training, highest memory usage
+- **ZeRO-2**: Balanced performance and memory efficiency ✅
+- **ZeRO-3**: Maximum memory efficiency, slower communication
 
-### 4. Thinking Mode Training
+## Notes
 
-Include thinking examples in your data:
-
-```json
-{
-  "from": "gpt",
-  "value": "<think>\nLet me think about this step by step...\nFirst, I need to...\nThen, I should...\n</think>\n\nBased on my analysis, the answer is..."
-}
-```
-
-## Inference Modes
-
-### 1. Standard Inference
-
-```python
-response = ovis.single_image_inference(
-    image_input="image.jpg",
-    text_prompt="Describe this image.",
-    max_new_tokens=1024
-)
-```
-
-### 2. Thinking Mode
-
-```python
-response = ovis.single_image_inference(
-    image_input="image.jpg", 
-    text_prompt="Analyze this complex diagram.",
-    enable_thinking=True,
-    thinking_budget=2048,
-    max_new_tokens=3072
-)
-```
-
-### 3. Streaming Output
-
-```python
-for token in ovis.single_image_inference_streaming(
-    image_input="image.jpg",
-    text_prompt="Tell me a story about this image.",
-    enable_thinking=True
-):
-    print(token, end='', flush=True)
-```
-
-### 4. Visual Grounding
-
-```python
-response = ovis.grounding_inference(
-    image_input="image.jpg",
-    text_prompt="Find the <ref>red apple</ref> in the image.",
-    request_type="box"
-)
-# Output includes: <box>(x1,y1),(x2,y2)</box>
-```
-
-## Performance Tips
-
-### Memory Optimization
-
-1. **Reduce image resolution**: Lower `*_max_pixels` values
-2. **Gradient checkpointing**: Set `"gradient_checkpointing": true`
-3. **Mixed precision**: Use `"bf16": true`
-4. **Batch size**: Reduce `per_device_train_batch_size`, increase `gradient_accumulation_steps`
-
-### Training Speed
-
-1. **Flash Attention**: Use `"attn_implementation": "flash_attention_2"`
-2. **Compile**: Set `"torch_compile": true` (experimental)
-3. **DataLoader**: Optimize `dataloader_num_workers`
-
-## Directory Structure
-
-```
-src_theo/
-├── train_theo.py              # Main training script (uses original Ovis components)
-├── inference_ovis25.py        # Inference wrapper
-├── config/
-│   ├── train_config.json      # Training configuration
-│   └── deepspeed_config.json  # DeepSpeed configuration
-├── data/
-│   ├── train_data.json        # Training data
-│   └── images/                # Image files
-├── checkpoints/               # Model checkpoints
-└── run_training.sh           # Training launcher
-
-# Original Ovis components used:
-Ovis/ovis/train/dataset/conversation_dataset.py          # ConversationDataset
-Ovis/ovis/train/dataset/multimodal_dataset.py           # DataCollatorForMultimodalDataset
-Ovis/ovis/train/arguments.py                            # TrainingArguments
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **CUDA OOM**: Reduce batch size and image resolution
-2. **Slow training**: Enable flash attention and gradient checkpointing
-3. **Data loading errors**: Check image paths and formats
-4. **Tokenizer issues**: Ensure proper chat template format
-5. **Import errors**: Ensure original Ovis framework is in Python path
-6. **Dataset format**: Use the exact format expected by original `ConversationDataset`
-
-### Framework Integration
-
-**Using Original Components**: This implementation leverages the battle-tested components from the original Ovis framework:
-- `ConversationDataset`: Handles multimodal conversation data loading
-- `DataCollatorForMultimodalDataset`: Efficient batch processing for training
-- `TrainingArguments`: Extended arguments compatible with Ovis training pipeline
-
-**Benefits**: 
-- ✅ Proven reliability and performance
-- ✅ Proper handling of complex multimodal data
-- ✅ Optimized memory usage and batching
-- ✅ Compatible with original training strategies
-
-### Memory Requirements
-
-| Model | Min GPU Memory | Recommended |
-|-------|----------------|-------------|
-| Ovis2.5-2B | 12GB | 16GB |
-| Ovis2.5-9B | 24GB | 32GB |
-
-## Citation
-
-```bibtex
-@article{lu2025ovis25technicalreport,
-  title={Ovis2.5 Technical Report}, 
-  author={Shiyin Lu and Yang Li and Yu Xia and Yuwei Hu and others},
-  year={2025},
-  journal={arXiv:2508.11737}
-}
-```
+- Models: Ovis2.5-2B/9B with thinking mode support
+- Memory: 24GB+ GPU recommended for Ovis2.5-9B
+- Features: DeepSpeed, evaluation datasets, early stopping, LoRA support

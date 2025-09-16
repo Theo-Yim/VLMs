@@ -13,6 +13,7 @@ The pipeline intelligently merges referring expressions from RefCOCO, RefCOCOplu
 3. **refcoco_main3_verify.py**: Fixes missing A2 responses (optional)
 4. **refcoco_main_llm.py**: Generates refined A3 responses, with automated verification and fixing of incomplete tool uses and response format.
 5. **create_jsonl.py**: Converts to training JSONL format with Q and A3
+6. **convert_QnA_data_to_standard.py**: Converts to standard conversation format for immediate training use
 
 ## Usage
 
@@ -92,6 +93,22 @@ python create_jsonl.py --input_dir /path/to/json/files --output_file refcoco_qa_
 - `--input_dir`: Directory containing JSON files (default: `/mnt/nas3/Data/coco/refcoco_vlm_results_theo_llm/`)
 - `--output_file`: Output JSONL file path (default: `refcoco_qa_pairs.jsonl`)
 
+### Step 6: Conversation Format Conversion
+
+Convert QnA format to standard conversation format for immediate training use:
+
+```bash
+python convert_QnA_data_to_standard.py refcoco_qa_pairs.jsonl refcoco_train_ready.json
+```
+
+**Features**:
+- Converts QnA format to standard "human"/"gpt" conversation format
+- Processes tool calls: `{Crop ...}` → `<tool_call>Crop ...</tool_call>`
+- Ready for direct use in VLM training pipelines
+
+**Options**:
+- `--image_base_path`: Base path for resolving relative image paths
+
 ## File Structure
 
 ```
@@ -102,6 +119,7 @@ refcoco/
 ├── refcoco_main3_verify.py      # Response verification and fixing
 ├── refcoco_main_llm.py          # LLM-based answer enhancement
 ├── create_jsonl.py              # Training format conversion
+├── convert_QnA_data_to_standard.py # Conversation format conversion
 └── extras/                      # Experimental code (not in active use)
     ├── inference_*.py           # Various inference experiments
     ├── refcoco_main*.py         # Alternative pipeline versions
@@ -131,6 +149,24 @@ refcoco/
 ### Training JSONL Format
 ```json
 {"image_path": "coco/train2017/000000549347.jpg", "image_id": "000000549347", "QnA": [{"Q": "What is the individual doing?", "A3": "<think>Let me closely look at the person.\n\n{Crop person 2 [181, 16, 220, 191]}\n\nUpon closer inspection, the person is engaging with the camera.</think>\n\n<answer>The person is engaging with the camera.\n</answer>"}]}
+```
+
+### Final Conversation Format (Training-Ready)
+```json
+{
+  "image": "coco/train2017/000000549347.jpg",
+  "image_id": "000000549347", 
+  "conversations": [
+    {
+      "from": "human",
+      "value": "<image>\nWhat is the individual doing?"
+    },
+    {
+      "from": "gpt",
+      "value": "<think>Let me closely look at the person.\n\n<tool_call>Crop person 2 [181, 16, 220, 191]</tool_call>\n\nUpon closer inspection, the person is engaging with the camera.</think>\n\n<answer>The person is engaging with the camera.</answer>"
+    }
+  ]
+}
 ```
 
 ### Features

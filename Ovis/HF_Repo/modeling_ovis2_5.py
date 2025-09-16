@@ -830,6 +830,8 @@ class Ovis2_5(OvisPreTrainedModel, GenerationMixin):
             pixel_values=pixel_values,
             grid_thws=grid_thws,
         )
+        # Remove inputs_embeds from kwargs to avoid duplicate argument error
+        kwargs.pop('inputs_embeds', None)
         return self.llm(inputs_embeds=inputs_embeds, attention_mask=attention_mask, labels=labels, **kwargs)
 
     def merge_multimodal(
@@ -848,9 +850,27 @@ class Ovis2_5(OvisPreTrainedModel, GenerationMixin):
             visual_tokens = self.visual_tokenizer(pixel_values, grid_thws)
             visual_embeds = self.vte(visual_tokens).to(dtype=multimodal_embeds.dtype, device=multimodal_embeds.device)
 
+            # Use non-in-place operations to avoid gradient computation issues with LoRA
             for i, indicator_id in enumerate(INDICATOR_IDS):
-                multimodal_embeds[input_ids == indicator_id] = visual_indicator_embeds[i]
-            multimodal_embeds[input_ids == VISUAL_ATOM_ID] = visual_embeds
+                mask = input_ids == indicator_id
+                multimodal_embeds = torch.where(
+                    mask.unsqueeze(-1).expand(-1, -1, multimodal_embeds.size(-1)),
+                    visual_indicator_embeds[i].unsqueeze(0).unsqueeze(0).expand_as(multimodal_embeds),
+                    multimodal_embeds
+                )
+            
+            # Replace visual atom tokens with visual embeddings
+            visual_mask = input_ids == VISUAL_ATOM_ID
+            if visual_mask.any():
+                # Create a clone to avoid in-place operations
+                result_embeds = multimodal_embeds.clone()
+                visual_positions = torch.nonzero(visual_mask, as_tuple=False)
+                
+                # Replace positions with visual embeddings
+                for idx, (batch_idx, seq_idx) in enumerate(visual_positions):
+                    if idx < visual_embeds.size(0):
+                        result_embeds[batch_idx, seq_idx] = visual_embeds[idx]
+                multimodal_embeds = result_embeds
 
         return multimodal_embeds
 
@@ -1008,6 +1028,10 @@ class Ovis2_5(OvisPreTrainedModel, GenerationMixin):
         """Standard transformers interface - delegates to LLM"""
         self.llm.set_output_embeddings(new_embeddings)
 
+    def resize_token_embeddings(self, new_num_tokens=None, pad_to_multiple_of=None):
+        """Resize token embeddings - delegates to LLM"""
+        return self.llm.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         """Prepare inputs for generation - delegates to LLM"""
         # Handle multimodal inputs
@@ -1025,6 +1049,156 @@ class Ovis2_5(OvisPreTrainedModel, GenerationMixin):
         else:
             # Text-only generation, delegate to LLM
             return self.llm.prepare_inputs_for_generation(input_ids, **kwargs)
+
+    def chat(
+        self,
+        prompt: str,
+        history: Optional[List[Dict]] = None,
+        images: Optional[List[PIL.Image.Image]] = None,
+        videos: Optional[List[List[PIL.Image.Image]]] = None,
+        do_sample: bool = True,
+        max_new_tokens: int = 1024,
+        temperature: float = 0.6,
+        top_p: float = 0.9,
+        top_k: int = 50,
+        enable_thinking: bool = False,
+        enable_thinking_budget: bool = False,
+        thinking_budget: int = 2048,
+        min_pixels: int = 448 * 448,
+        max_pixels: int = 1792 * 1792,
+        **kwargs
+    ) -> Tuple[str, Optional[str], List[Dict]]:
+        """
+        High-level chat interface for Ovis2.5
+        
+        Args:
+            prompt: Text prompt for the current turn
+            history: Conversation history as list of message dicts
+            images: List of PIL Images for the current turn
+            videos: List of video frame lists for the current turn  
+            do_sample: Whether to use sampling for generation
+            max_new_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            top_p: Top-p sampling parameter
+            top_k: Top-k sampling parameter
+            enable_thinking: Whether to enable thinking mode
+            enable_thinking_budget: Whether to limit thinking tokens
+            thinking_budget: Maximum tokens for thinking phase
+            min_pixels: Minimum image pixels
+            max_pixels: Maximum image pixels
+            **kwargs: Additional generation parameters
+            
+        Returns:
+            Tuple of (response, thinking, updated_history)
+        """
+        # Input validation
+        if images and videos:
+            raise ValueError("Cannot provide both images and videos in the same turn")
+            
+        # Validate thinking budget constraint
+        if enable_thinking and enable_thinking_budget:
+            if max_new_tokens <= thinking_budget:
+                max_new_tokens = thinking_budget + min(1024, max_new_tokens)
+        
+        # Initialize history if None
+        if history is None:
+            history = []
+            
+        # Prepare content for current user message
+        content = []
+        
+        # Add images if provided
+        if images:
+            for image in images:
+                if not isinstance(image, PIL.Image.Image):
+                    raise TypeError("Images must be PIL.Image.Image objects")
+                content.append({"type": "image", "image": image})
+                
+        # Add videos if provided  
+        if videos:
+            for video_frames in videos:
+                if not isinstance(video_frames, list):
+                    raise TypeError("Videos must be lists of PIL.Image.Image objects")
+                for frame in video_frames:
+                    if not isinstance(frame, PIL.Image.Image):
+                        raise TypeError("Video frames must be PIL.Image.Image objects")
+                content.append({"type": "video", "video": video_frames})
+        
+        # Add text prompt
+        content.append({"type": "text", "text": prompt})
+        
+        # Create current user message
+        user_message = {"role": "user", "content": content if len(content) > 1 else prompt}
+        
+        # Build full conversation
+        full_messages = history + [user_message]
+        
+        try:
+            # Preprocess inputs
+            input_ids, pixel_values, grid_thws = self.preprocess_inputs(
+                messages=full_messages,
+                add_generation_prompt=True, 
+                enable_thinking=enable_thinking,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels,
+            )
+            
+            # Get device
+            device = next(self.parameters()).device
+            
+            # Move to device
+            input_ids = input_ids.to(device)
+            if pixel_values is not None:
+                pixel_values = pixel_values.to(device)
+            if grid_thws is not None:
+                grid_thws = grid_thws.to(device)
+                
+            # Prepare generation kwargs
+            generation_kwargs = {
+                "inputs": input_ids,
+                "pixel_values": pixel_values,
+                "grid_thws": grid_thws,
+                "max_new_tokens": max_new_tokens,
+                "temperature": temperature,
+                "do_sample": do_sample,
+                "top_p": top_p,
+                "top_k": top_k,
+                "enable_thinking": enable_thinking,
+                "enable_thinking_budget": enable_thinking_budget,
+                "thinking_budget": thinking_budget,
+                "eos_token_id": self.text_tokenizer.eos_token_id,
+                "pad_token_id": self.text_tokenizer.pad_token_id,
+                **kwargs
+            }
+            
+            # Generate response
+            with torch.no_grad():
+                outputs = self.generate(**generation_kwargs)
+                
+            # Decode response
+            response_text = self.text_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            
+            # Parse thinking and response
+            thinking = None
+            response = response_text
+            
+            if enable_thinking and "<think>" in response_text and "</think>" in response_text:
+                thinking_start = response_text.find("<think>") + 7
+                thinking_end = response_text.find("</think>")
+                thinking = response_text[thinking_start:thinking_end].strip()
+                response = response_text[thinking_end + 8:].strip()
+            
+            # Clean up response
+            response = response.replace("<|im_start|>", "").replace("<|im_end|>", "").strip()
+            
+            # Create assistant message for history
+            assistant_message = {"role": "assistant", "content": response}
+            updated_history = history + [user_message, assistant_message]
+            
+            return response, thinking, updated_history
+            
+        except Exception as e:
+            raise RuntimeError(f"Chat generation failed: {str(e)}") from e
 
 
 AutoConfig.register('siglip2_navit', Siglip2NavitConfig)

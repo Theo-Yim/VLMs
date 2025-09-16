@@ -5,6 +5,7 @@
     "data_name": "test_dataset",
     "data_type": "conversation",
     "data_path": "./Ovis/src_theo/sample_data/train_data.json",
+    "eval_data_path": null,
     "image_folder": "./Ovis/src_theo/sample_data/",
     "single_image_min_pixels": 200704,
     "single_image_max_pixels": 3211264,
@@ -44,7 +45,7 @@
     "dataloader_drop_last": true,
     "dataloader_persistent_workers": true,
     "gradient_checkpointing": true,
-    "deepspeed": null,
+    "deepspeed": "./Ovis/scripts/zero_configs/zero2_cp.json",
     
     "train_modules": "all",
     "freeze_vision_tower": false,
@@ -63,6 +64,5 @@
     "remove_unused_columns": false,
     "report_to": "none",
     
-    "packing": false,
-    "distribute_gpus": true
+    "packing": false
   }
