@@ -4,9 +4,8 @@ Handles image cropping based on tool call coordinates
 """
 
 import re
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Dict, Any
 from PIL import Image
-import torch
 import numpy as np
 
 
@@ -16,7 +15,7 @@ class CropTool:
     """
     
     def __init__(self):
-        self.tool_call_pattern = r'<tool_call>\[([\d.,\s]+)\]</tool_call>'
+        self.tool_call_pattern = r'<tool_call>Crop \[([0-9.,\s]+)\]</tool_call>'
         
     def extract_tool_calls(self, text: str) -> List[Dict[str, Any]]:
         """
@@ -270,12 +269,18 @@ class CropTool:
 def parse_and_replace_tool_calls(text: str) -> str:
     """
     Parse tool calls in the format {Crop person 1 [0.00, 141.43, 79.23, 480.00]}
-    and replace with <tool_call>[0.00, 141.43, 79.23, 480.00]</tool_call>
+    and replace with <tool_call>Crop [0.00, 141.43, 79.23, 480.00]</tool_call>
+
+    Example Usage:
+    When a3_answer is "<think>Let me closely look at the person.\n\n{Crop person 2 [181, 16, 220, 191]}\n\nUpon closer inspection, the person is engaging with the camera.</think>\n\n<answer>The person is engaging with the camera.\n</answer>"
+    a3_answer_processed = parse_and_replace_tool_calls(a3_answer)
+    a3_answer_processed is "<think>Let me closely look at the person.\n\n<tool_call>Crop [181, 16, 220, 191]</tool_call>\n\nUpon closer inspection, the person is engaging with the camera.</think>\n\n<answer>The person is engaging with the camera.\n</answer>"
+    messages.append({"role": "assistant", "content": a3_answer_processed})
     """
     pattern = r'\{Crop[^}]*\[([\d.,\s]+)\]\}'
     
     def replace_func(match):
         coords = match.group(1)
-        return f"<tool_call>[{coords}]</tool_call>"
+        return f"<tool_call>Crop [{coords}]</tool_call>"
     
     return re.sub(pattern, replace_func, text)
