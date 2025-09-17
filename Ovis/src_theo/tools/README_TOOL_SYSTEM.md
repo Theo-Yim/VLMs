@@ -137,34 +137,42 @@ System automatically detects and routes new tool calls.
 
 ### Real-time Chat with Tools
 ```python
-from src_theo.tools.inference_integration import (
-    chat_with_tool_execution_streaming,  # Recommended - streaming experience
-    chat_with_tool_execution            # Alternative - batch control
+from src_theo.tools.inference_integration_v2 import (
+    chat_with_tool_execution_batch,      # Batch generation - higher throughput
+    chat_with_tool_execution_streaming,  # Streaming - real-time feedback
+    GenerationConfig
 )
 
-# Option 1: Streaming Generation (Recommended - Real-time streaming)
-response, thinking, history = chat_with_tool_execution_streaming(
+# Configure generation parameters
+config = GenerationConfig(
+    tool_timeout=10.0,
+    adaptive_batch_size=6,
+    max_generation_cycles=10
+)
+
+# Option 1: Batch Generation (Higher throughput, production APIs)
+response, thinking, history = chat_with_tool_execution_batch(
     model=model,
-    prompt="Examine the person in detail", 
+    prompt="Examine the person in detail",
     images=[image],
-    do_sample=True,
+    config=config,
     temperature=0.7,
     max_new_tokens=1024
 )
 
-# Option 2: Batch Generation (Simple and precise control with batch delivery)  
-response, thinking, history = chat_with_tool_execution(
+# Option 2: Streaming Generation (Real-time feedback, interactive UIs)
+response, thinking, history = chat_with_tool_execution_streaming(
     model=model,
-    prompt="Examine the person in detail", 
+    prompt="Examine the person in detail",
     images=[image],
-    do_sample=True,
+    config=config,
     temperature=0.7,
     max_new_tokens=1024
 )
 
 # Model flow (example with Crop tool):
 # 1. Generates: "Let me examine this person. <tool_call>Crop [100,100,200,200]</tool_call>"
-# 2. System IMMEDIATELY detects "</tool_call>" → pauses generation  
+# 2. System IMMEDIATELY detects "</tool_call>" → pauses generation
 # 3. System executes crop → feeds cropped image back into model context
 # 4. Model continues with cropped image: " The person is wearing a blue shirt."
 
@@ -183,14 +191,14 @@ python your_script.py
 ```
 
 
-### Scalable Tool System
+### Tool System
 
-**InferenceToolRegistry** automatically detects and executes multiple tool types:
+**ToolRegistry** automatically detects and executes multiple tool types:
 - `detect_tool_calls()` - Finds any registered tool calls in text
 - `execute_tool_call()` - Routes to appropriate tool execution
 - `create_multimodal_context()` - Builds context with tool results
 
-### Adding New Inference Tools
+### Adding New Tools
 
 1. **Create Tool Class** (same as training):
 ```python
@@ -199,12 +207,12 @@ class DrawingTool:
     def draw_on_image(self, image, parameters): ...
 ```
 
-2. **Register in InferenceToolRegistry**:
+2. **Register in ToolRegistry**:
 ```python
-# Add to _setup_available_tools() in inference_integration.py
+# Add to _setup_tools() in inference_integration_v2.py
 try:
     from drawing_tool import DrawingTool
-    self.register_tool('draw', DrawingTool())
+    self.tools['draw'] = DrawingTool()
 except ImportError:
     pass
 ```
