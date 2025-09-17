@@ -1,11 +1,12 @@
-# Crop Tool System for Ovis2.5
+# Tool System for Ovis2.5
 
-Train Ovis2.5 to generate bounding box coordinates and use cropped regions for detailed analysis.
+Train Ovis2.5 to use tools during generation with visual feedback loops.
 
-**Approach**: 
-- Treat coordinates as regular text tokens
-- Insert cropped images after tool calls in training
-- Learn through visual feedback: generate coords → see crop → continue reasoning
+**Key Features**:
+- **Trained Tools**: Model learns tool usage during training (e.g., crop tool)
+- **LLM-Driven Tools**: Instant tool addition via descriptions (no training needed)
+- **Real-time Execution**: Tools execute during generation, not after
+- **Visual Feedback**: Tool results fed back into generation context immediately
 
 ## System Architecture
 
@@ -133,41 +134,35 @@ System automatically detects and routes new tool calls.
 
 ## Inference Usage
 
-**Real-time Tool Execution**: Execute tool calls during generation, just like training.
+Noe that LLM will stop the inference when it sees </tool_call> and calls the tool. Return values of tool will be instantly fed into the inference process right after </tool_call> before LLM continues the process.
 
-### Real-time Chat with Tools
+### Basic Usage
+
 ```python
 from src_theo.tools.inference_integration_v2 import (
-    chat_with_tool_execution_batch,      # Batch generation - higher throughput
-    chat_with_tool_execution_streaming,  # Streaming - real-time feedback
+    chat_with_tool_execution_batch,
+    chat_with_tool_execution_streaming,
     GenerationConfig
 )
 
-# Configure generation parameters
-config = GenerationConfig(
-    tool_timeout=10.0,
-    adaptive_batch_size=6,
-    max_generation_cycles=10
-)
+# Load model
+model = AutoModelForCausalLM.from_pretrained("AIDC-AI/Ovis2.5-9B", trust_remote_code=True)
+config = GenerationConfig(tool_timeout=15.0)
 
-# Option 1: Batch Generation (Higher throughput, production APIs)
+# Batch generation (production-focused)
 response, thinking, history = chat_with_tool_execution_batch(
     model=model,
-    prompt="Examine the person in detail",
+    prompt="Examine this image in detail",
     images=[image],
-    config=config,
-    temperature=0.7,
-    max_new_tokens=1024
+    config=config
 )
 
-# Option 2: Streaming Generation (Real-time feedback, interactive UIs)
+# Streaming generation (interactive UI-focused)
 response, thinking, history = chat_with_tool_execution_streaming(
     model=model,
-    prompt="Examine the person in detail",
+    prompt="Examine this image in detail",
     images=[image],
-    config=config,
-    temperature=0.7,
-    max_new_tokens=1024
+    config=config
 )
 
 # Model flow (example with Crop tool):
@@ -176,64 +171,74 @@ response, thinking, history = chat_with_tool_execution_streaming(
 # 3. System executes crop → feeds cropped image back into model context
 # 4. Model continues with cropped image: " The person is wearing a blue shirt."
 
-# Works with ANY registered tool: DrawingTool, AnnotationTool, etc.
+# Works with ANY registered tool.
+```
+
+### Tool Types
+
+**1. Trained Tools (use_tool_descriptions=False)**
+```python
+# Model uses learned patterns from training
+response = chat_with_tool_execution_batch(
+    model=model,
+    prompt="Analyze this image",
+    images=[image],
+    use_tool_descriptions=False  # Default trained behavior
+)
+```
+
+**2. LLM-Driven Tools (use_tool_descriptions=True)**
+```python
+# Register new tool instantly
+tool_registry = ToolRegistry()
+tool_registry.register_tool("draw", DrawingTool(), {
+    "name": "draw",
+    "description": "Draw shapes or annotations on the image",
+    "usage": "<tool_call>Draw [action]</tool_call>",
+    "example": "<tool_call>Draw [red box around person]</tool_call>"
+})
+
+# LLM automatically uses tools based on descriptions
+response = chat_with_tool_execution_batch(
+    model=model,
+    prompt="Analyze and highlight regions",
+    images=[image],
+    use_tool_descriptions=True  # Enable LLM-driven tool selection
+)
+```
+
+### Adding New Tools
+
+**Method 1: Built-in Registration (for training)**
+```python
+# Add to _setup_tools() in inference_integration_v2.py
+self.tools["new_tool"] = NewTool()
+```
+
+**Method 2: Runtime Registration (instant tools)**
+```python
+class NewTool:
+    def extract_tool_calls(self, text): ...
+    def execute(self, image, parameters): ...
+
+tool_registry.register_tool("new_tool", NewTool(), {
+    "name": "new_tool",
+    "description": "Tool description for LLM",
+    "usage": "<tool_call>NewTool [params]</tool_call>"
+})
 ```
 
 ### Debug Logging
 
-Enable debug logging to see tool execution details. Multiple methods available, but below is the recommended method.
-
-Setting the Environment Variable (Recommended):
 ```bash
-# Set environment variable before running Python
 export OVIS_TOOL_DEBUG=true
 python your_script.py
 ```
 
+### Examples
 
-### Tool System
-
-**ToolRegistry** automatically detects and executes multiple tool types:
-- `detect_tool_calls()` - Finds any registered tool calls in text
-- `execute_tool_call()` - Routes to appropriate tool execution
-- `create_multimodal_context()` - Builds context with tool results
-
-### Adding New Tools
-
-1. **Create Tool Class** (same as training):
-```python
-class DrawingTool:
-    def extract_tool_calls(self, text): ...
-    def draw_on_image(self, image, parameters): ...
-```
-
-2. **Register in ToolRegistry**:
-```python
-# Add to _setup_tools() in inference_integration_v2.py
-try:
-    from drawing_tool import DrawingTool
-    self.tools['draw'] = DrawingTool()
-except ImportError:
-    pass
-```
-
-3. **Add Execution Logic**:
-```python
-# Add to execute_tool_call() method
-elif tool_name == 'draw':
-    return tool_instance.draw_on_image(original_image, tool_call['parameters'])
-```
-
-**System automatically handles**:
-- Multi-tool detection in single text
-- Tool execution in order
-- Context building with results
-- Generation resume with tool_call returns
-
-### How It Works
-
-**Training**: `"text <tool_call>ToolName [...]</tool_call> <tool_result> continuation"`
-
-**Inference**: Same! Tool calls are executed in real-time and results are fed back into the generation context immediately.
-
-**Key difference from normal chat**: Tool calls are executed **during generation**, not after. The model sees tool results before continuing to generate text.
+See `example_usage.py` for complete examples including:
+- Basic batch/streaming generation
+- Trained vs LLM-driven tool usage
+- Multi-turn conversations
+- Performance benchmarking

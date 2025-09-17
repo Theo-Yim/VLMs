@@ -170,15 +170,45 @@ class ToolRegistry:
 
     def __init__(self):
         self.tools = {}
+        self.tool_descriptions = {}
         self._setup_tools()
 
     def _setup_tools(self):
         """Initialize available tools"""
         try:
             from src_theo.tools.crop_tool import CropTool
-            self.tools["crop"] = CropTool()
+            crop_tool = CropTool()
+            self.tools["crop"] = crop_tool
+            self.tool_descriptions["crop"] = {
+                "name": "crop",
+                "description": "Crop a specific region from the image for detailed analysis",
+                "parameters": "[x1,y1,x2,y2] - coordinates as integers from 0-999 representing relative positions",
+                "usage": "<tool_call>Crop [100,100,200,200]</tool_call>",
+                "example": "To examine the person in the center: <tool_call>Crop [300,200,600,700]</tool_call>"
+            }
         except ImportError:
             logger.warning("CropTool not available")
+
+    def register_tool(self, name: str, tool_instance, description: Dict):
+        """Register a new tool with description"""
+        self.tools[name] = tool_instance
+        self.tool_descriptions[name] = description
+
+    def get_system_prompt_tools(self) -> str:
+        """Generate tool descriptions for system prompt"""
+        if not self.tool_descriptions:
+            return ""
+
+        tools_text = "\n\nAvailable tools:\n"
+        for name, desc in self.tool_descriptions.items():
+            tools_text += f"- {desc['name']}: {desc['description']}\n"
+            tools_text += f"  Usage: {desc['usage']}\n"
+            tools_text += f"  Parameters: {desc['parameters']}\n"
+            if 'example' in desc:
+                tools_text += f"  Example: {desc['example']}\n"
+            tools_text += "\n"
+
+        return tools_text
 
     def detect_tool_calls(self, text: str) -> List[Dict]:
         """Detect tool calls with minimal processing"""
@@ -204,8 +234,12 @@ class ToolRegistry:
         tool_instance = tool_call["tool_instance"]
         tool_name = tool_call["tool_name"]
 
+        # Dynamic execution based on tool type
         if tool_name == "crop":
             return tool_instance.crop_image(image, tool_call["coordinates"])
+        elif hasattr(tool_instance, 'execute'):
+            # Generic execute method for new tools
+            return tool_instance.execute(image, tool_call.get("parameters", {}))
         else:
             raise ValueError(f"Unknown tool: {tool_name}")
 
@@ -229,6 +263,7 @@ def chat_with_tool_execution_batch(
     max_new_tokens: int = 1024,
     min_pixels: int = 448 * 448,
     max_pixels: int = 1792 * 1792,
+    use_tool_descriptions: bool = True,
     **kwargs,
 ) -> Tuple[str, Optional[str], List[Dict]]:
     """
@@ -249,6 +284,22 @@ def chat_with_tool_execution_batch(
     if history is None:
         history = []
 
+    # Add tool descriptions to system message if enabled
+    messages = history.copy()
+    if use_tool_descriptions:
+        tool_descriptions = tool_registry.get_system_prompt_tools()
+        if tool_descriptions:
+            # Add system message with tool descriptions if not already present
+            if not messages or messages[0].get("role") != "system":
+                system_content = f"You are a helpful assistant.{tool_descriptions}"
+                messages = [{"role": "system", "content": system_content}] + messages
+            else:
+                # Update existing system message
+                if isinstance(messages[0]["content"], str):
+                    messages[0]["content"] += tool_descriptions
+                else:
+                    messages[0]["content"].append({"type": "text", "text": tool_descriptions})
+
     # Prepare content for current user message
     content = []
     current_images = images.copy() if images else []
@@ -264,7 +315,7 @@ def chat_with_tool_execution_batch(
     content.append({"type": "text", "text": prompt})
 
     user_message = {"role": "user", "content": content if len(content) > 1 else prompt}
-    full_messages = history + [user_message]
+    full_messages = messages + [user_message]
 
     # Initialize generation state
     response_text = ""
@@ -503,6 +554,7 @@ def chat_with_tool_execution_streaming(
     max_new_tokens: int = 1024,
     min_pixels: int = 448 * 448,
     max_pixels: int = 1792 * 1792,
+    use_tool_descriptions: bool = True,
     **kwargs,
 ) -> Tuple[str, Optional[str], List[Dict]]:
     """
@@ -523,6 +575,22 @@ def chat_with_tool_execution_streaming(
     if history is None:
         history = []
 
+    # Add tool descriptions to system message if enabled
+    messages = history.copy()
+    if use_tool_descriptions:
+        tool_descriptions = tool_registry.get_system_prompt_tools()
+        if tool_descriptions:
+            # Add system message with tool descriptions if not already present
+            if not messages or messages[0].get("role") != "system":
+                system_content = f"You are a helpful assistant.{tool_descriptions}"
+                messages = [{"role": "system", "content": system_content}] + messages
+            else:
+                # Update existing system message
+                if isinstance(messages[0]["content"], str):
+                    messages[0]["content"] += tool_descriptions
+                else:
+                    messages[0]["content"].append({"type": "text", "text": tool_descriptions})
+
     # Prepare content
     content = []
     current_images = images.copy() if images else []
@@ -538,7 +606,7 @@ def chat_with_tool_execution_streaming(
     content.append({"type": "text", "text": prompt})
 
     user_message = {"role": "user", "content": content if len(content) > 1 else prompt}
-    full_messages = history + [user_message]
+    full_messages = messages + [user_message]
 
     # Initialize state
     executed_tools = []

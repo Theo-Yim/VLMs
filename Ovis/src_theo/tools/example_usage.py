@@ -1,7 +1,7 @@
 """
-Example usage of professional tool execution for Ovis2.5
+Example usage of tool execution for Ovis2.5
 
-This demonstrates both batch and streaming approaches with proper configuration.
+Demonstrates batch/streaming generation, trained tools, and LLM-driven tool selection.
 """
 
 import asyncio
@@ -9,9 +9,34 @@ from PIL import Image
 from inference_integration_v2 import (
     chat_with_tool_execution_batch,
     chat_with_tool_execution_streaming,
-    ToolExecutionConfig,
-    enable_debug_logging
+    ToolRegistry,
+    GenerationConfig
 )
+
+
+class DrawingTool:
+    """Example of a new tool that can be instantly added"""
+
+    def extract_tool_calls(self, text: str):
+        """Extract drawing tool calls from text"""
+        import re
+        pattern = r"<tool_call>Draw \[([^\]]+)\]</tool_call>"
+        matches = []
+        for match in re.finditer(pattern, text):
+            matches.append({
+                "start_pos": match.start(),
+                "end_pos": match.end(),
+                "full_match": match.group(0),
+                "parameters": {"action": match.group(1)},
+                "tool_name": "draw",
+                "tool_instance": self
+            })
+        return matches
+
+    def execute(self, image: Image.Image, parameters: dict):
+        """Execute drawing operation"""
+        print(f"Drawing: {parameters.get('action', '')}")
+        return image
 
 def load_model():
     """Load your Ovis2.5 model - replace with your model loading code"""
@@ -35,15 +60,10 @@ def example_batch_generation():
     image = Image.open("test_image.jpg")
 
     # Configure tool execution
-    config = ToolExecutionConfig(
+    config = GenerationConfig(
         tool_timeout=15.0,
-        max_concurrent_tools=2,
-        enable_caching=True,
-        adaptive_batching=True
+        enable_caching=True
     )
-
-    # Enable debug logging to see tool execution details
-    enable_debug_logging()
 
     # Chat with tool execution
     response, thinking, history = chat_with_tool_execution_batch(
@@ -74,13 +94,10 @@ def example_streaming_generation():
     # Load test image
     image = Image.open("test_image.jpg")
 
-    # Configure for streaming (slightly different settings)
-    config = ToolExecutionConfig(
+    # Configure for streaming
+    config = GenerationConfig(
         tool_timeout=10.0,
-        max_concurrent_tools=1,  # Lower for streaming stability
-        enable_caching=True,
-        adaptive_batching=True,
-        generation_batch_size=4  # Smaller batches for streaming
+        enable_caching=True
     )
 
     # Chat with streaming tool execution
@@ -109,9 +126,9 @@ def example_multi_turn_conversation():
     model = load_model()
     image = Image.open("test_image.jpg")
 
-    config = ToolExecutionConfig(
+    config = GenerationConfig(
         tool_timeout=15.0,
-        enable_caching=True  # Important for multi-turn
+        enable_caching=True
     )
 
     # Start conversation
@@ -152,7 +169,7 @@ def benchmark_comparison():
     model = load_model()
     image = Image.open("test_image.jpg")
 
-    config = ToolExecutionConfig(tool_timeout=15.0)
+    config = GenerationConfig(tool_timeout=15.0)
     prompt = "Examine this image in detail, looking at specific regions."
 
     # Benchmark batch
@@ -183,27 +200,121 @@ def benchmark_comparison():
     print(f"Batch faster by: {((streaming_time - batch_time) / batch_time * 100):.1f}%")
     print(f"Response lengths - Batch: {len(batch_response)}, Streaming: {len(streaming_response)}")
 
+
+def example_trained_tools():
+    """Example using trained crop tool (existing behavior)"""
+
+    model = load_model()
+    image = Image.open("test_image.jpg")
+
+    config = GenerationConfig(
+        tool_timeout=15.0,
+        enable_caching=True
+    )
+
+    # Use trained tools without descriptions
+    response, thinking, history = chat_with_tool_execution_batch(
+        model=model,
+        prompt="Examine this image in detail. Focus on any people you see.",
+        images=[image],
+        config=config,
+        use_tool_descriptions=False,  # Model uses trained behavior
+        temperature=0.7
+    )
+
+    print("=== TRAINED TOOL USAGE ===")
+    print(f"Response: {response}")
+
+    return response
+
+
+def example_llm_driven_tools():
+    """Example using LLM-driven tool selection with descriptions"""
+
+    model = load_model()
+    image = Image.open("test_image.jpg")
+
+    config = GenerationConfig(
+        tool_timeout=15.0,
+        enable_caching=True
+    )
+
+    # Add new tool instantly
+    tool_registry = ToolRegistry()
+    drawing_tool = DrawingTool()
+    tool_registry.register_tool("draw", drawing_tool, {
+        "name": "draw",
+        "description": "Draw shapes or annotations on the image",
+        "parameters": "[action] - description of what to draw",
+        "usage": "<tool_call>Draw [circle around face]</tool_call>",
+        "example": "To highlight a person: <tool_call>Draw [red box around person]</tool_call>"
+    })
+
+    # Use LLM-driven tool selection
+    response, thinking, history = chat_with_tool_execution_batch(
+        model=model,
+        prompt="Analyze this image and highlight interesting regions",
+        images=[image],
+        config=config,
+        use_tool_descriptions=True,  # Enable tool descriptions
+        temperature=0.7
+    )
+
+    print("=== LLM-DRIVEN TOOL USAGE ===")
+    print(f"Response: {response}")
+
+    return response
+
+
+def example_mixed_usage():
+    """Example using both trained and instant tools together"""
+
+    model = load_model()
+    image = Image.open("test_image.jpg")
+
+    config = GenerationConfig(tool_timeout=15.0)
+
+    # Use both trained crop and instant drawing tools
+    response, thinking, history = chat_with_tool_execution_batch(
+        model=model,
+        prompt="Crop the most interesting part of this image, then suggest what annotations to add",
+        images=[image],
+        config=config,
+        use_tool_descriptions=True,  # LLM can see both trained and new tools
+        temperature=0.7
+    )
+
+    print("=== MIXED TOOL USAGE ===")
+    print(f"Response: {response}")
+
+    return response
+
+
 if __name__ == "__main__":
-    # Run examples
     print("Starting Ovis2.5 Tool Execution Examples...\n")
 
     try:
-        # Example 1: Batch generation (recommended for production)
+        # Core examples
         example_batch_generation()
-
         print("\n" + "="*50 + "\n")
 
-        # Example 2: Streaming generation (recommended for UI)
         example_streaming_generation()
-
         print("\n" + "="*50 + "\n")
 
-        # Example 3: Multi-turn conversation
         example_multi_turn_conversation()
-
         print("\n" + "="*50 + "\n")
 
-        # Example 4: Performance comparison
+        # Tool system examples
+        example_trained_tools()
+        print("\n" + "="*50 + "\n")
+
+        example_llm_driven_tools()
+        print("\n" + "="*50 + "\n")
+
+        example_mixed_usage()
+        print("\n" + "="*50 + "\n")
+
+        # Performance comparison
         benchmark_comparison()
 
     except Exception as e:
@@ -211,4 +322,3 @@ if __name__ == "__main__":
         print("Make sure you have:")
         print("1. Ovis2.5 model installed and accessible")
         print("2. test_image.jpg in the current directory")
-        print("3. Required dependencies installed")
