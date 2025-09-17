@@ -8,7 +8,7 @@ import logging
 import os
 import threading
 import time
-from typing import Dict, List, Optional, Tuple, Callable
+from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 from PIL import Image
@@ -43,45 +43,50 @@ class ToolAwareStreamer(TextIteratorStreamer):
     """
     Advanced streaming implementation that detects tool calls in real-time
     and coordinates with the generation loop for precise tool execution.
-    
+
     Features:
     - Real-time tool call detection during streaming
     - Pause/resume mechanism for tool execution
     - Thread-safe communication with generation loop
     - Maintains all original streaming capabilities
     """
-    
+
     def __init__(
-        self, 
-        tokenizer, 
+        self,
+        tokenizer,
         tool_registry,
         skip_prompt: bool = True,
         skip_special_tokens: bool = True,
         on_tool_detected: Optional[Callable] = None,
-        **decode_kwargs
+        **decode_kwargs,
     ):
-        super().__init__(tokenizer, skip_prompt=skip_prompt, skip_special_tokens=skip_special_tokens, **decode_kwargs)
-        
+        super().__init__(
+            tokenizer,
+            skip_prompt=skip_prompt,
+            skip_special_tokens=skip_special_tokens,
+            **decode_kwargs,
+        )
+
         self.tool_registry = tool_registry
         self.on_tool_detected = on_tool_detected
-        
+
         # Tool detection state
         self.accumulated_text = ""
         self.tool_pause_requested = False
         self.generation_should_pause = threading.Event()
         self.tool_execution_complete = threading.Event()
         self.tool_execution_complete.set()  # Initially not in tool execution
-        
+
         # Thread-safe communication
         self._lock = threading.Lock()
-        
+
         # Tool tracking
         self.detected_tools = []
         self.processed_tool_count = 0
-        
+
         if _should_log_debug():
             logger.debug("🚀 ToolAwareStreamer initialized with real-time tool detection")
-    
+
     def put(self, value):
         """
         Override put method to detect tool calls in real-time.
@@ -92,62 +97,64 @@ class ToolAwareStreamer(TextIteratorStreamer):
             if isinstance(value, torch.Tensor):
                 if len(value.shape) > 1:
                     value = value[0]  # Remove batch dimension if present
-                new_text = self.tokenizer.decode(value, skip_special_tokens=self.skip_special_tokens)
+                new_text = self.tokenizer.decode(
+                    value, skip_special_tokens=self.skip_special_tokens
+                )
             else:
                 new_text = str(value)
-            
+
             # Accumulate text for tool detection
             self.accumulated_text += new_text
-            
+
             # Check for tool completion
             if self._check_for_tool_completion():
                 if _should_log_debug():
                     logger.debug("🔧 Tool completion detected in stream - requesting pause")
-                
+
                 # Signal main thread to pause generation
                 self.tool_pause_requested = True
                 self.generation_should_pause.set()
-                
+
                 # Call callback if provided
                 if self.on_tool_detected:
                     self.on_tool_detected(self.accumulated_text)
-        
+
         # Continue with normal streaming
         super().put(value)
-    
+
     def _check_for_tool_completion(self) -> bool:
         """Check if a tool call has just been completed"""
         if not self.accumulated_text:
             return False
-        
+
         # Detect all current tool calls
         current_tools = self.tool_registry.detect_tool_calls(self.accumulated_text)
-        
+
         # Check if we have new completed tool calls
         if len(current_tools) > self.processed_tool_count:
             # Check if the latest tool call is actually complete
             latest_text = self.accumulated_text
             if "</tool_call>" in latest_text:
                 # Verify we're not inside an incomplete tool call
-                open_count = latest_text.count('<tool_call>')
-                close_count = latest_text.count('</tool_call>')
+                open_count = latest_text.count("<tool_call>")
+                close_count = latest_text.count("</tool_call>")
                 if close_count >= open_count and close_count > self.processed_tool_count:
                     self.detected_tools = current_tools
                     return True
-        
+
         return False
-    
+
     def wait_for_tool_execution(self, timeout: float = 30.0):
         """Wait for tool execution to complete before continuing generation"""
         if _should_log_debug():
             logger.debug("🔧 Streamer waiting for tool execution to complete")
-        
+
         success = self.tool_execution_complete.wait(timeout=timeout)
         if not success:
             logger.warning(f"Tool execution timeout after {timeout}s")
-        
+
         return success
-    
+
     def notify_tool_execution_complete(self, processed_count: int):
         """Notify streamer that tool execution is complete and can resume"""
         with self._lock:
@@ -155,10 +162,10 @@ class ToolAwareStreamer(TextIteratorStreamer):
             self.tool_pause_requested = False
             self.generation_should_pause.clear()
             self.tool_execution_complete.set()
-            
+
             if _should_log_debug():
                 logger.debug(f"🔧 Tool execution complete - processed {processed_count} tools")
-    
+
     def reset_for_new_generation(self):
         """Reset streamer state for a new generation cycle"""
         with self._lock:
@@ -168,19 +175,19 @@ class ToolAwareStreamer(TextIteratorStreamer):
             self.tool_execution_complete.set()
             self.detected_tools = []
             self.processed_tool_count = 0
-            
+
             if _should_log_debug():
                 logger.debug("🔄 ToolAwareStreamer reset for new generation")
-    
+
     def should_pause_generation(self) -> bool:
         """Check if generation should pause for tool execution"""
         return self.tool_pause_requested
-    
+
     def get_current_text(self) -> str:
         """Get current accumulated text (thread-safe)"""
         with self._lock:
             return self.accumulated_text
-    
+
     def get_detected_tools(self) -> List[Dict]:
         """Get currently detected tools (thread-safe)"""
         with self._lock:
@@ -378,25 +385,27 @@ def chat_with_tool_execution(
         """Check if we're currently inside an incomplete tool call"""
         if not text:
             return False
-        
+
         # Count opening and closing tool call tags
-        open_count = text.count('<tool_call>')
-        close_count = text.count('</tool_call>')
-        
+        open_count = text.count("<tool_call>")
+        close_count = text.count("</tool_call>")
+
         # If we have more opening tags than closing tags, we're inside a tool call
         return open_count > close_count
 
-    def _get_adaptive_batch_size(current_text: str, remaining_tokens: int, prev_inside_tool_call: bool) -> int:
+    def _get_adaptive_batch_size(
+        current_text: str, remaining_tokens: int, prev_inside_tool_call: bool
+    ) -> int:
         """Get batch size based on current context - slower inside tool calls"""
         currently_inside = _is_inside_tool_call(current_text)
-        
+
         # Log when we transition states (for debugging)
         if currently_inside != prev_inside_tool_call:
             if currently_inside and _should_log_debug():
                 logger.debug("🔧 Entering tool call - switching to token-by-token generation")
             elif not currently_inside and _should_log_debug():
                 logger.debug("🔧 Exiting tool call - resuming batch generation")
-        
+
         if currently_inside:
             # Token-by-token generation inside tool calls for precise control
             return 1
@@ -408,7 +417,9 @@ def chat_with_tool_execution(
         # Generate next batch of tokens (adaptive batch size)
         with torch.no_grad():
             prev_inside_state = inside_tool_call
-            batch_size = _get_adaptive_batch_size(response_text, max_new_tokens - len(generated_tokens), prev_inside_state)
+            batch_size = _get_adaptive_batch_size(
+                response_text, max_new_tokens - len(generated_tokens), prev_inside_state
+            )
 
             generation_kwargs = {
                 "inputs": input_ids,
@@ -440,8 +451,10 @@ def chat_with_tool_execution(
 
             tool_executed = False
             # Check for complete tool calls - must be a newly completed tool call
-            tool_just_completed = "</tool_call>" in partial_response and not _is_inside_tool_call(response_text)
-            
+            tool_just_completed = "</tool_call>" in partial_response and not _is_inside_tool_call(
+                response_text
+            )
+
             if tool_just_completed:
                 tool_calls = tool_registry.detect_tool_calls(response_text)
 
@@ -557,19 +570,19 @@ def chat_with_tool_execution_streaming(
 ) -> Tuple[str, Optional[str], List[Dict]]:
     """
     Advanced streaming chat with real-time tool execution during generation.
-    
+
     This function provides the ultimate user experience by combining:
     - Real-time token streaming (immediate response feedback)
     - Precise tool call detection and execution
     - Context rebuilding with tool results
     - Seamless generation resume
-    
+
     Advantages over batch-based approach:
     - Better perceived throughput (streaming)
     - Smoother user experience
     - Professional-grade real-time interaction
     - Thread-safe tool coordination
-    
+
     Args:
         model: Ovis2.5 model instance
         prompt: Text prompt for conversation
@@ -587,74 +600,76 @@ def chat_with_tool_execution_streaming(
         min_pixels: Minimum pixels for image preprocessing (default: 448*448)
         max_pixels: Maximum pixels for image preprocessing (default: 1792*1792)
         **kwargs: Additional generation parameters
-        
+
     Returns:
         Tuple of (response_text, thinking, updated_history)
-        
+
     Note:
         This is the premium streaming implementation that provides real-time
         feedback while maintaining precise tool execution control.
     """
     tool_registry = InferenceToolRegistry()
-    
+
     # Initialize history
     if history is None:
         history = []
-        
+
     # Prepare content for current user message
     content = []
     current_images = []
-    
+
     # Add images if provided
     if images:
         for image in images:
             content.append({"type": "image", "image": image})
             current_images.append(image)
-    
+
     # Add videos if provided
     if videos:
         for video_frames in videos:
             content.append({"type": "video", "video": video_frames})
-                
+
     # Add text prompt
     content.append({"type": "text", "text": prompt})
-    
+
     # Create current user message
     user_message = {"role": "user", "content": content if len(content) > 1 else prompt}
-    
+
     # Build full conversation
     full_messages = history + [user_message]
-    
+
     # Initialize tool execution state
     executed_tools = []
     final_response_text = ""
     thinking = None
-    
+
     # Setup tool-aware streamer with coordination callback
     def on_tool_detected_callback(current_text: str):
         """Callback when tool is detected - this runs in streamer thread"""
         if _should_log_debug():
             logger.debug(f"🔧 Tool callback triggered with {len(current_text)} chars")
-    
+
     # Create advanced streaming infrastructure
     streamer = ToolAwareStreamer(
         tokenizer=model.text_tokenizer,
         tool_registry=tool_registry,
         skip_prompt=True,
         skip_special_tokens=True,
-        on_tool_detected=on_tool_detected_callback
+        on_tool_detected=on_tool_detected_callback,
     )
-    
+
     # Generation loop with streaming and tool coordination
     current_conversation = full_messages.copy()
-    
-    while len(executed_tools) == 0 or streamer.should_pause_generation():  # Continue until no more tools
+
+    while (
+        len(executed_tools) == 0 or streamer.should_pause_generation()
+    ):  # Continue until no more tools
         # Reset streamer for new generation cycle
         streamer.reset_for_new_generation()
-        
+
         if _should_log_debug():
             logger.debug(f"🚀 Starting streaming generation cycle {len(executed_tools) + 1}")
-        
+
         # Preprocess inputs for current conversation state
         input_ids, pixel_values, grid_thws = model.preprocess_inputs(
             current_conversation,
@@ -664,7 +679,7 @@ def chat_with_tool_execution_streaming(
             max_pixels=max_pixels,
             **kwargs,
         )
-        
+
         # Move to device
         device = next(model.parameters()).device
         input_ids = input_ids.to(device)
@@ -672,13 +687,14 @@ def chat_with_tool_execution_streaming(
             pixel_values = pixel_values.to(device)
         if grid_thws is not None:
             grid_thws = grid_thws.to(device)
-        
+
         # Start streaming generation with tool awareness
         generation_kwargs = {
             "inputs": input_ids,
             "pixel_values": pixel_values,
             "grid_thws": grid_thws,
-            "max_new_tokens": max_new_tokens - len(final_response_text.split()),  # Adjust for previous generations
+            "max_new_tokens": max_new_tokens
+            - len(final_response_text.split()),  # Adjust for previous generations
             "do_sample": do_sample,
             "temperature": temperature,
             "top_p": top_p,
@@ -690,17 +706,16 @@ def chat_with_tool_execution_streaming(
             "pad_token_id": model.text_tokenizer.pad_token_id,
             "streamer": streamer,  # The magic happens here!
         }
-        
+
         if _should_log_debug():
             logger.debug("🎯 Starting streaming generation with tool detection...")
-        
+
         # Generate in separate thread to allow tool interruption
         generation_thread = threading.Thread(
-            target=lambda: model.generate(**generation_kwargs),
-            daemon=True
+            target=lambda: model.generate(**generation_kwargs), daemon=True
         )
         generation_thread.start()
-        
+
         # Monitor for tool execution needs
         tool_executed = False
         while generation_thread.is_alive():
@@ -708,92 +723,96 @@ def chat_with_tool_execution_streaming(
             if streamer.should_pause_generation():
                 if _should_log_debug():
                     logger.debug("🔧 Tool detected - coordinating execution...")
-                
+
                 # Get current state from streamer
                 detected_tools = streamer.get_detected_tools()
-                
+
                 # Wait for generation thread to pause/complete current batch
                 generation_thread.join(timeout=5.0)
                 if generation_thread.is_alive():
                     logger.warning("Generation thread did not pause within timeout")
-                
+
                 # Execute new tools
                 if detected_tools and len(detected_tools) > len(executed_tools) and current_images:
-                    new_tools = detected_tools[len(executed_tools):]
-                    
+                    new_tools = detected_tools[len(executed_tools) :]
+
                     for tool_call in new_tools:
                         tool_name = tool_call["tool_name"]
                         if _should_log_debug():
                             logger.debug(f"🔧 Executing {tool_name} tool from stream")
-                        
+
                         try:
                             # Execute tool
                             original_image = current_images[0]
                             tool_result = tool_registry.execute_tool_call(tool_call, original_image)
-                            
+
                             if tool_name == "crop":
                                 current_images.append(tool_result)
-                            
+
                             executed_tools.append(tool_call)
                             tool_executed = True
-                            
+
                             if _should_log_debug():
                                 logger.debug(f"🔧 Tool {tool_name} executed successfully")
-                                
+
                         except Exception as e:
                             logger.error(f"Tool execution failed: {e}")
-                
+
                 # Rebuild conversation with tool results
                 if tool_executed:
                     # Get partial response text accumulated so far
                     partial_response = streamer.get_current_text()
                     final_response_text += partial_response
-                    
+
                     # Create multimodal context with tool results
                     multimodal_context = tool_registry.create_multimodal_context(
                         final_response_text, current_images[0], executed_tools
                     )
-                    
+
                     # Update conversation with partial response containing tool results
                     assistant_partial = {"role": "assistant", "content": multimodal_context}
                     current_conversation = full_messages + [assistant_partial]
-                    
+
                     # Notify streamer that tool execution is complete
                     streamer.notify_tool_execution_complete(len(executed_tools))
-                    
+
                     if _should_log_debug():
                         logger.debug(f"🔧 Context rebuilt with {len(executed_tools)} tool results")
-                    
+
                     # Break to start new generation cycle with updated context
                     break
                 else:
                     # No new tools, continue generation
                     streamer.notify_tool_execution_complete(len(executed_tools))
-            
+
             # Small sleep to prevent busy waiting
             time.sleep(0.01)
-        
+
         # Wait for generation to complete if no tools were executed
         if not tool_executed:
             generation_thread.join()
             final_response_text = streamer.get_current_text()
             break
-    
+
     # Parse thinking and response (similar to original chat function)
     if enable_thinking and "<think>" in final_response_text and "</think>" in final_response_text:
         thinking_start = final_response_text.find("<think>") + 7
         thinking_end = final_response_text.find("</think>")
         thinking = final_response_text[thinking_start:thinking_end].strip()
-        final_response_text = final_response_text[thinking_end + 8:].strip()
-    
+        final_response_text = final_response_text[thinking_end + 8 :].strip()
+
     # Clean up response
-    final_response_text = final_response_text.replace("<|im_start|>", "").replace("<|im_end|>", "").strip()
-    
+    final_response_text = (
+        final_response_text.replace("<|im_start|>", "").replace("<|im_end|>", "").strip()
+    )
+
     # Create assistant message for history
     assistant_message = {"role": "assistant", "content": final_response_text}
     updated_history = history + [user_message, assistant_message]
-    
+
     if _should_log_debug():
-        logger.debug(f"🎉 Streaming generation complete: {len(final_response_text)} chars, {len(executed_tools)} tools")
-    
+        logger.debug(
+            f"🎉 Streaming generation complete: {len(final_response_text)} chars, {len(executed_tools)} tools"
+        )
+
     return final_response_text, thinking, updated_history

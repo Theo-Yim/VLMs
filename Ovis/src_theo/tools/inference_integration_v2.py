@@ -16,7 +16,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Callable, Pattern
+from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 from PIL import Image
@@ -29,6 +29,7 @@ DEBUG_TOOL_EXECUTION = os.getenv("OVIS_TOOL_DEBUG", "false").lower() == "true"
 @dataclass
 class GenerationConfig:
     """Configuration for generation parameters"""
+
     tool_timeout: float = 10.0
     adaptive_batch_size: int = 6
     token_by_token_threshold: bool = True
@@ -54,8 +55,8 @@ class TextAnalyzer:
 
     def __init__(self):
         # Compile regex patterns once for performance
-        self._tool_call_pattern = re.compile(r'<tool_call>')
-        self._tool_close_pattern = re.compile(r'</tool_call>')
+        self._tool_call_pattern = re.compile(r"<tool_call>")
+        self._tool_close_pattern = re.compile(r"</tool_call>")
         self._last_analyzed_text = ""
         self._last_result = False
 
@@ -81,10 +82,7 @@ class TextAnalyzer:
 
     def tool_just_completed(self, partial_response: str, full_text: str) -> bool:
         """Check if a tool call just completed in this response chunk"""
-        return (
-            "</tool_call>" in partial_response and
-            not self.is_inside_tool_call(full_text)
-        )
+        return "</tool_call>" in partial_response and not self.is_inside_tool_call(full_text)
 
 
 class TokenCounter:
@@ -118,7 +116,9 @@ class GenerationController:
 
     def get_adaptive_batch_size(self, current_text: str, remaining_tokens: int) -> int:
         """Get adaptive batch size based on current context"""
-        if self.config.token_by_token_threshold and self.text_analyzer.is_inside_tool_call(current_text):
+        if self.config.token_by_token_threshold and self.text_analyzer.is_inside_tool_call(
+            current_text
+        ):
             return 1  # Token-by-token inside tool calls
         return min(self.config.adaptive_batch_size, remaining_tokens)
 
@@ -128,7 +128,7 @@ class GenerationController:
         pixel_values: Optional[torch.Tensor],
         grid_thws: Optional[torch.Tensor],
         batch_size: int,
-        **kwargs
+        **kwargs,
     ) -> Dict:
         """Prepare generation arguments with consistent parameters"""
         return {
@@ -151,7 +151,7 @@ class GenerationController:
         self,
         input_ids: torch.Tensor,
         pixel_values: Optional[torch.Tensor] = None,
-        grid_thws: Optional[torch.Tensor] = None
+        grid_thws: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """Move tensors to device"""
         device = self.device_manager.device
@@ -177,6 +177,7 @@ class ToolRegistry:
         """Initialize available tools"""
         try:
             from src_theo.tools.crop_tool import CropTool
+
             crop_tool = CropTool()
             self.tools["crop"] = crop_tool
             self.tool_descriptions["crop"] = {
@@ -184,7 +185,7 @@ class ToolRegistry:
                 "description": "Crop a specific region from the image for detailed analysis",
                 "parameters": "[x1,y1,x2,y2] - coordinates as integers from 0-999 representing relative positions",
                 "usage": "<tool_call>Crop [100,100,200,200]</tool_call>",
-                "example": "To examine the person in the center: <tool_call>Crop [300,200,600,700]</tool_call>"
+                "example": "To examine the person in the center: <tool_call>Crop [300,200,600,700]</tool_call>",
             }
         except ImportError:
             logger.warning("CropTool not available")
@@ -204,7 +205,7 @@ class ToolRegistry:
             tools_text += f"- {desc['name']}: {desc['description']}\n"
             tools_text += f"  Usage: {desc['usage']}\n"
             tools_text += f"  Parameters: {desc['parameters']}\n"
-            if 'example' in desc:
+            if "example" in desc:
                 tools_text += f"  Example: {desc['example']}\n"
             tools_text += "\n"
 
@@ -237,13 +238,15 @@ class ToolRegistry:
         # Dynamic execution based on tool type
         if tool_name == "crop":
             return tool_instance.crop_image(image, tool_call["coordinates"])
-        elif hasattr(tool_instance, 'execute'):
+        elif hasattr(tool_instance, "execute"):
             # Generic execute method for new tools
             return tool_instance.execute(image, tool_call.get("parameters", {}))
         else:
             raise ValueError(f"Unknown tool: {tool_name}")
 
-    def create_multimodal_context(self, text: str, images: List[Image.Image], executed_tools: List[Dict]) -> List[Dict]:
+    def create_multimodal_context(
+        self, text: str, images: List[Image.Image], executed_tools: List[Dict]
+    ) -> List[Dict]:
         """Create multimodal context"""
         if executed_tools and "crop" in self.tools and images:
             crop_tool = self.tools["crop"]
@@ -352,7 +355,7 @@ def chat_with_tool_execution_batch(
             )
 
             outputs = model.generate(**generation_kwargs)
-            new_tokens = outputs[0][input_ids.size(1):]
+            new_tokens = outputs[0][input_ids.size(1) :]
             generation_controller.token_counter.add_tokens(new_tokens.tolist())
 
             # Decode and analyze
@@ -361,7 +364,9 @@ def chat_with_tool_execution_batch(
 
             # Check for tool completion
             tool_executed = False
-            if generation_controller.text_analyzer.tool_just_completed(partial_response, response_text):
+            if generation_controller.text_analyzer.tool_just_completed(
+                partial_response, response_text
+            ):
                 tool_calls = tool_registry.detect_tool_calls(response_text)
 
                 # Execute new tool calls
@@ -407,8 +412,10 @@ def chat_with_tool_execution_batch(
                         )
 
                         # Move to device
-                        input_ids, pixel_values, grid_thws = generation_controller.move_tensors_to_device(
-                            input_ids, pixel_values, grid_thws
+                        input_ids, pixel_values, grid_thws = (
+                            generation_controller.move_tensors_to_device(
+                                input_ids, pixel_values, grid_thws
+                            )
                         )
 
             # Check for EOS
@@ -420,11 +427,15 @@ def chat_with_tool_execution_batch(
                 input_ids = outputs[0].unsqueeze(0)
 
     # Parse thinking and response
-    if kwargs.get("enable_thinking", False) and "<think>" in response_text and "</think>" in response_text:
+    if (
+        kwargs.get("enable_thinking", False)
+        and "<think>" in response_text
+        and "</think>" in response_text
+    ):
         thinking_start = response_text.find("<think>") + 7
         thinking_end = response_text.find("</think>")
         thinking = response_text[thinking_start:thinking_end].strip()
-        response_text = response_text[thinking_end + 8:].strip()
+        response_text = response_text[thinking_end + 8 :].strip()
 
     # Clean up response
     response_text = response_text.replace("<|im_start|>", "").replace("<|im_end|>", "").strip()
@@ -447,9 +458,14 @@ class ToolAwareStreamer(TextIteratorStreamer):
         skip_prompt: bool = True,
         skip_special_tokens: bool = True,
         on_tool_detected: Optional[Callable] = None,
-        **decode_kwargs
+        **decode_kwargs,
     ):
-        super().__init__(tokenizer, skip_prompt=skip_prompt, skip_special_tokens=skip_special_tokens, **decode_kwargs)
+        super().__init__(
+            tokenizer,
+            skip_prompt=skip_prompt,
+            skip_special_tokens=skip_special_tokens,
+            **decode_kwargs,
+        )
 
         self.tool_registry = tool_registry
         self.text_analyzer = text_analyzer
@@ -624,7 +640,7 @@ def chat_with_tool_execution_streaming(
         text_analyzer=generation_controller.text_analyzer,
         skip_prompt=True,
         skip_special_tokens=True,
-        on_tool_detected=on_tool_detected_callback
+        on_tool_detected=on_tool_detected_callback,
     )
 
     # Generation loop with cycle limit
@@ -660,8 +676,7 @@ def chat_with_tool_execution_streaming(
 
         # Generate in thread with timeout
         generation_thread = threading.Thread(
-            target=lambda: model.generate(**generation_kwargs),
-            daemon=True
+            target=lambda: model.generate(**generation_kwargs), daemon=True
         )
         generation_thread.start()
 
@@ -680,7 +695,7 @@ def chat_with_tool_execution_streaming(
 
                 # Execute tools
                 if detected_tools and len(detected_tools) > len(executed_tools) and current_images:
-                    new_tools = detected_tools[len(executed_tools):]
+                    new_tools = detected_tools[len(executed_tools) :]
 
                     for tool_call in new_tools:
                         tool_name = tool_call["tool_name"]
@@ -723,21 +738,29 @@ def chat_with_tool_execution_streaming(
             break
 
     # Parse thinking and response
-    if kwargs.get("enable_thinking", False) and "<think>" in final_response_text and "</think>" in final_response_text:
+    if (
+        kwargs.get("enable_thinking", False)
+        and "<think>" in final_response_text
+        and "</think>" in final_response_text
+    ):
         thinking_start = final_response_text.find("<think>") + 7
         thinking_end = final_response_text.find("</think>")
         thinking = final_response_text[thinking_start:thinking_end].strip()
-        final_response_text = final_response_text[thinking_end + 8:].strip()
+        final_response_text = final_response_text[thinking_end + 8 :].strip()
 
     # Clean up response
-    final_response_text = final_response_text.replace("<|im_start|>", "").replace("<|im_end|>", "").strip()
+    final_response_text = (
+        final_response_text.replace("<|im_start|>", "").replace("<|im_end|>", "").strip()
+    )
 
     # Create assistant message for history
     assistant_message = {"role": "assistant", "content": final_response_text}
     updated_history = history + [user_message, assistant_message]
 
     if DEBUG_TOOL_EXECUTION:
-        logger.debug(f"🎉 Streaming complete: {len(final_response_text)} chars, {len(executed_tools)} tools")
+        logger.debug(
+            f"🎉 Streaming complete: {len(final_response_text)} chars, {len(executed_tools)} tools"
+        )
 
     return final_response_text, thinking, updated_history
 
@@ -762,5 +785,5 @@ __all__ = [
     "chat_with_tool_execution_streaming",
     "GenerationConfig",
     "enable_debug_logging",
-    "disable_debug_logging"
+    "disable_debug_logging",
 ]
