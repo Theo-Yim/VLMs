@@ -4,6 +4,7 @@ InternVL3/samples/
 *.pkl
 Ovis/checkpoints/
 *.safetensors
+utils/lh-poc/dataset/
 utils/lh-poc/results_*/
 
 # Byte-compiled / optimized / DLL files
