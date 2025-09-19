@@ -26,19 +26,57 @@ from ovis.util.constants import BEGIN_LINE, END_LINE
 from ovis.util.utils import smart_unit, rank0_print, rankN_print, replace_torch_load_with_weights_only_false
 
 
+def _get_model_dtype(training_args: TrainingArguments):
+    """Determine the appropriate dtype based on training arguments."""
+    if training_args.bf16:
+        return torch.bfloat16
+    elif training_args.fp16:
+        return torch.float16
+    else:
+        return torch.float32
+
+
+def _cast_model_components_to_dtype(model, dtype: torch.dtype):
+    """Cast model components to the specified dtype for FlashAttention compatibility."""
+    rank0_print(f"Casting model components to {dtype}")
+
+    # Cast visual tokenizer components
+    if hasattr(model, 'visual_tokenizer') and model.visual_tokenizer is not None:
+        model.visual_tokenizer = model.visual_tokenizer.to(dtype)
+        rank0_print(f"Visual tokenizer cast to {dtype}")
+    # Cast VTE (Visual Token Embedding) if exists
+    if hasattr(model, 'vte') and model.vte is not None:
+        model.vte = model.vte.to(dtype)
+        rank0_print(f"VTE cast to {dtype}")
+    # Cast LLM components
+    if hasattr(model, 'llm') and model.llm is not None:
+        model.llm = model.llm.to(dtype)
+        rank0_print(f"LLM cast to {dtype}")
+
+    return model
+
+
 def load_model(model_args: ModelArguments, training_args: TrainingArguments):
     rankN_print(BEGIN_LINE)
     rankN_print(f'Loading Ovis model from: {training_args.ovis_pretrained_path}')
     rankN_print(END_LINE)
-    
+
+    # Determine the appropriate dtype
+    model_dtype = _get_model_dtype(training_args)
+    rank0_print(f"Using model dtype: {model_dtype}")
+
+    # Load model with appropriate dtype
     model, loading_info = Ovis2_5.from_pretrained(
         training_args.ovis_pretrained_path,
-        # torch_dtype=torch.bfloat16,
+        torch_dtype=model_dtype,  # made conditional, aligned with configs
         output_loading_info=True,
         trust_remote_code=True,
-        # attn_implementation="flash_attention_2" if HAS_FLASH_ATTN else "eager",
+        attn_implementation="flash_attention_2" if HAS_FLASH_ATTN else "eager",
         # device_map={"vte": 1, "visual_tokenizer": 1, "llm": 0},
     )
+    # Explicit dtype casting for FlashAttention compatibility
+    model = _cast_model_components_to_dtype(model, model_dtype)
+
     rankN_print(BEGIN_LINE)
     rankN_print(f'Loading info of Ovis:\n{loading_info}')
     rankN_print(END_LINE)
@@ -49,6 +87,14 @@ def load_model(model_args: ModelArguments, training_args: TrainingArguments):
         model.visual_tokenizer.vit.config._attn_implementation = model_args.attn_implementation
     model.llm.config.use_cache = False
     model.config.use_cache = False
+
+    # # We can validate dtype after all configurations, but it is commented out for now
+    # rank0_print(f"Final model dtype validation:")
+    # if hasattr(model, 'visual_tokenizer') and model.visual_tokenizer is not None:
+    #     rank0_print(f"Visual tokenizer dtype: {next(model.visual_tokenizer.parameters()).dtype}")
+    # if hasattr(model, 'llm') and model.llm is not None:
+    #     rank0_print(f"LLM dtype: {next(model.llm.parameters()).dtype}")
+
     rank0_print(BEGIN_LINE)
     rank0_print(f'model.config:\n{model.config}')
     rank0_print(END_LINE)

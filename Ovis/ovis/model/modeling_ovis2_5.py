@@ -627,6 +627,18 @@ class Siglip2NavitModel(Siglip2PreTrainedModel):
             return_dict=return_dict,
         )
 
+    def _get_block(self, layer_index):
+        return self.vision_model.encoder.layers[layer_index]
+    
+    def _get_attn_weight(self, layer_index):
+        return torch.cat([self._get_block(layer_index).self_attn.q_proj.weight,
+                            self._get_block(layer_index).self_attn.k_proj.weight,
+                            self._get_block(layer_index).self_attn.v_proj.weight])
+
+    def _get_pose_embed(self):
+        return self.vision_model.embeddings.position_embedding.weight
+
+
 class VisualEmbedding(torch.nn.Embedding):
     """
     A visual embedding layer that can handle both discrete token IDs (long) and continuous
@@ -766,6 +778,15 @@ class VisualTokenizer(torch.nn.Module):
         tokens = torch.cat((tokens, padding_tensor), dim=1)
         return tokens
 
+    def get_monitor_tensors(self):
+        monitor_tensors = dict(
+            vit_bottom=self.vit._get_attn_weight(0),
+            vit_top=self.vit._get_attn_weight(-1),
+            head=self.head[0].weight,
+            pos_embed=self.vit._get_pose_embed()
+        )
+        return monitor_tensors
+
 
 class OvisPreTrainedModel(PreTrainedModel):
     config_class = Ovis2_5_Config
@@ -812,6 +833,16 @@ class Ovis2_5(OvisPreTrainedModel, GenerationMixin):
 
     def tie_weights(self):
         self.llm.tie_weights()
+
+    def get_monitor_tensors(self):
+        monitor_tensors = dict(
+            wte=self.get_wte().weight,
+            lm_head=self.llm.get_output_embeddings().weight,
+            vte=self.vte.weight
+        )
+        monitor_tensors.update(
+            {f'visual_tokenizer_{k}': v for k, v in self.visual_tokenizer.get_monitor_tensors().items()})
+        return monitor_tensors
 
     def get_wte(self):
         return self.llm.get_input_embeddings()

@@ -37,36 +37,36 @@ prompt_theo_sync_w_R1_v2 = """## Existing Labels
 {material_parts}
 """
 
-prompt_theo_sync_w_R1 = """## Existing Labels
-{existing_labels}
+# prompt_theo_sync_w_R1 = """## Existing Labels
+# {existing_labels}
 
-## You are performing "Multimodal Interleaved Reasoning" task to analyze an image for physical defects. 
+# ## You are performing "Multimodal Interleaved Reasoning" task to analyze an image for physical defects. 
 
-* During the thinking process, carefully examine all visual cues in the original image, and logically infer the space, material part that might be associated with the potential defect, and the clue of physical defects which lead us to the conclusion of the defect described in the Existing Label above — without mentioning the Existing Label directly.
+# * During the thinking process, carefully examine all visual cues in the original image, and logically infer the space, material part that might be associated with the potential defect, and the clue of physical defects which lead us to the conclusion of the defect described in the Existing Label above — without mentioning the Existing Label directly.
 
-* Do not explicitly mention any of the content or presence of the Existing Labels in your response nor in the thinking process.
+# * Do not explicitly mention any of the content or presence of the Existing Labels in your response nor in the thinking process.
 
-* After thinking process, output the final answer within a pair of <A> </A> tags. In the Answer section with a pair of <A> </A> tags, there should be only a single JSON object, which contains the defect information with the following fields:
-- space: [Space name from the list of Spaces]
-- defect_present: Yes / No
-- If Yes, also include:
-  - defect_type: [type from the list of Defect Types]
-  - defect_description: [brief description of the defect]
-  - defectiveness_score: [0-10, representing the severity]
-  - material_part: [material part from the list of Material Parts]
-  - location_in_image: [describe location within the image, if applicable]
+# * After thinking process, output the final answer within a pair of <A> </A> tags. In the Answer section with a pair of <A> </A> tags, there should be only a single JSON object, which contains the defect information with the following fields:
+# - space: [Space name from the list of Spaces]
+# - defect_present: Yes / No
+# - If Yes, also include:
+#   - defect_type: [type from the list of Defect Types]
+#   - defect_description: [brief description of the defect]
+#   - defectiveness_score: [0-10, representing the severity]
+#   - material_part: [material part from the list of Material Parts]
+#   - location_in_image: [describe location within the image, if applicable]
 
-### List of Spaces
-{spaces}
+# ### List of Spaces
+# {spaces}
 
-### List of Defect Types
-{defect_types}
+# ### List of Defect Types
+# {defect_types}
 
-### List of Material Parts
-{material_parts}
-"""
+# ### List of Material Parts
+# {material_parts}
+# """
 
-prompt_inference = """You are a professional house construction inspector. Your job is to examine the provided image and determine if there is any defect. You need to see each part of the image, guess the space of the image taken, material part that might be associated with the potential defect, and determine if there is any visible defect. If yes, guess the defect type, defect description, defectiveness score, and location in the image.
+prompt_inference = """You are a professional home inspector AI. Your job is to examine the provided image and determine if there is any defect. You need to see each part of the image, guess the space of the image taken, material part that might be associated with the potential defect, and determine if there is any visible defect. If yes, guess the defect type, defect description, defectiveness score, and location in the image.
 
 You must output the answer in the json format with the following fields:
 - space: [Space name]
@@ -80,7 +80,7 @@ You must output the answer in the json format with the following fields:
 """
 
 R2_SYSTEM_PROMPT_integrated = """
-You are an AI assistant that rigorously follows this response protocol:
+You are a professional home inspector AI that rigorously follows this response protocol:
 
 1. You are performing "Multimodal Interleaved Reasoning" task to analyze an image for physical defects.
 
@@ -102,7 +102,7 @@ Do not explicitly mention any of the content or presence of the Existing Labels 
 
 * End your response with 'Final answer: '. In the Final answer section, there should be only a single JSON object, which contains the defect information with the following fields:
 - space: [Space name from the list of Spaces]
-- defect_present: Yes / No
+- defect_present: Yes / Unknown
 - If Yes, also include:
   - defect_type: [type from the list of Defect Types]
   - defect_description: [brief description of the defect]
@@ -120,9 +120,24 @@ Do not explicitly mention any of the content or presence of the Existing Labels 
 {material_parts}
 """
 
-prompt_theo = """## Existing Labels
-{existing_labels}
-## You are performing "Multimodal Interleaved Reasoning" task to analyze an image for physical defects. Output the thinking process within a pair of <T> </T> tags and then output the final answer within a pair of <A> </A> tags. 
+prompt_inference_R2 = """You are a professional home inspector AI that assesses homes for structural issues and defects. Examine the provided image(s) of the home and inspect each visible area. For every potential issue you find, guess the space of the image taken, identify the likely defect type, describe the defect, estimate the material(s) involved, give a severity score (0–10).
+If the image quality or angle is insufficient to judge or no defect is visible, say Unknown.”
+
+* End your response with 'Final answer: '. In the Final answer section, there should be only a single JSON object, which contains the defect information with the following fields:
+- space: [Space name from the list of Spaces]
+- defect_present: Yes / Unknown
+- If Yes, also include:
+  - defect_type: [type from the list of Defect Types]
+  - defect_description: [brief description of the defect]
+  - defectiveness_score: [0-10, representing the severity]
+  - material_part: [material part from the list of Material Parts]
+  - location_in_image: [describe location within the image, if applicable]
+
+### List of Defect Types
+{defect_types}
+"""
+
+prompt_theo_v1 = """## You are performing "Multimodal Interleaved Reasoning" task to analyze an image for physical defects. Output the thinking process within a pair of <T> </T> tags and then output the final answer within a pair of <A> </A> tags. 
 During the thinking process, carefully examine all visual cues in the original image, and logically infer the clue of physical defects which lead us to the conclusion of the Existing Label above. Let your reasoning process sequentially guide you from visual clues to the conclusion that aligns with the intended Existing Labels above—without referencing the Existing Label directly or mentioning its content anywhere in your thought process or answer. Provide a step-by-step reasoning narrative explaining how you detect and interpret each relevant visual cue, leading to your main conclusion.
 Do not explicitly mention any of the content or presence of the Existing Labels in your response nor inside <T> and </T>.
 
@@ -130,6 +145,30 @@ Your output must start from the thinking process with a pair of <T> </T> tags.
 In the Answer section with a pair of <A> </A> tags, there should be a JSON list, where the json object is the defect information for each defect with the following fields:
 - space: [Space name from the list of Spaces]
 - defect_present: Yes / No
+- If Yes, also include:
+  - defect_type: [type from the list of Defect Types]
+  - defect_description: [brief description of the defect]
+  - defectiveness_score: [0-10, representing the severity]
+  - material_part: [material part from the list of Material Parts]
+  - location_in_image: [describe location within the image, if applicable]
+"""
+
+# v2 으로 한번 뽑아봐야함. 먼저 defect label 정리된 이후에 v2 으로 뽑아보기.
+prompt_theo_v2_system = """You are a professional home inspector AI."""
+
+prompt_theo_v2 = """## Existing Labels
+{existing_labels}
+
+## You are performing "Multimodal Interleaved Reasoning" task to analyze a home image for structural issues and defects. Output the thinking process within a pair of <T> </T> tags and then output the final answer within a pair of <A> </A> tags, with the following rules.
+
+* During the thinking process, carefully examine all visual cues in the original image. Use logical reasoning to identify the areas and materials that might be associated with a potential defect, as well as any physical clues that could lead to a conclusion about the described defect in the Existing Label above without referencing the Existing Label directly or mentioning its content anywhere in your thought process or answer. Try to envision how the item would appear if there were no defects present. Also, consider other possible types of defects beyond the one mentioned and explain why these alternatives are not applicable in this case.
+Do not explicitly mention any of the content or presence of the Existing Labels in your response nor inside <T> and </T>.
+Your output must start from the thinking process with a pair of <T> </T> tags.
+
+* After the thinking section, output the final answer within a pair of <A> </A> tags.
+In the Answer section with a pair of <A> </A> tags, there should be a JSON object, where the json object is the defect information with the following fields:
+- space: [Space name from the list of Spaces]
+- defect_present: Yes / Unknown
 - If Yes, also include:
   - defect_type: [type from the list of Defect Types]
   - defect_description: [brief description of the defect]
