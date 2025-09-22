@@ -80,7 +80,7 @@ def create_jsonl_from_directory(input_dir: Path, output_file: Path) -> None:
     total_qa_pairs = 0
     
     for json_file in json_files:
-        print(f"Processing: {json_file.name}")
+        # print(f"Processing: {json_file.name}")
         entries = process_json_file(json_file)
         all_entries.extend(entries)
         processed_files += 1

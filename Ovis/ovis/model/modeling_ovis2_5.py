@@ -1017,7 +1017,6 @@ class Ovis2_5(OvisPreTrainedModel, GenerationMixin):
                     kwargs['streamer'].put(early_stopping_ids) if 'streamer' in kwargs else None
                 else:
                     input_ids_appendent = output_ids
-                
 
                 # second generation
                 new_inputs = torch.cat([inputs, input_ids_appendent], dim=-1)
@@ -1128,8 +1127,8 @@ class Ovis2_5(OvisPreTrainedModel, GenerationMixin):
             
         # Validate thinking budget constraint
         if enable_thinking and enable_thinking_budget:
-            if max_new_tokens <= thinking_budget:
-                max_new_tokens = thinking_budget + min(1024, max_new_tokens)
+            if max_new_tokens <= thinking_budget + 25:
+                thinking_budget = min(thinking_budget, max_new_tokens - 25)
         
         # Initialize history if None
         if history is None:

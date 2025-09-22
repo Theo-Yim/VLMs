@@ -24,21 +24,21 @@ def get_optimal_max_pixels() -> int:
             print(f"Detected GPU memory: {gpu_memory_gb:.1f} GB")
             # Set max_pixels based on GPU memory
             if gpu_memory_gb >= 25:  # >24GB GPUs
-                max_pixels = 1792 * 1792 # 3211264
+                max_pixels = 1792 * 1792  # 3211264
                 print(f"Using max_pixels = 1792 * 1792 for high-memory GPU ({gpu_memory_gb:.1f}GB)")
             elif gpu_memory_gb >= 21:  # ~24GB GPUs
-                max_pixels = 1168 * 1168 # 1364624
+                max_pixels = 1168 * 1168  # 1364624
                 print(f"Using max_pixels = 1168 * 1168 for 24GB GPU ({gpu_memory_gb:.1f}GB)")
             else:  # ~20GB GPUs
-                max_pixels = 1024 * 1024 # 1048576
+                max_pixels = 1024 * 1024  # 1048576
                 print(f"Using max_pixels = 1024 * 1024 for ~20GB GPU ({gpu_memory_gb:.1f}GB)")
             return max_pixels
         else:
             print("CUDA not available, using default max_pixels")
-            return 1792 * 1792 # 3211264
+            return 1792 * 1792  # 3211264
     except Exception as e:
         print(f"Error detecting GPU memory: {e}, using default max_pixels")
-        return 1792 * 1792 # 3211264
+        return 1792 * 1792  # 3211264
 
 
 def load_video_frames(
@@ -75,6 +75,17 @@ def load_video_frames(
         return None
 
 
+def escape_special_tokens(text: str) -> str:
+    """
+    Escape HTML characters in special tokens to prevent Gradio from filtering them.
+    Approach: replace < and > with HTML entities, &lt and &gt.
+    """
+    if not text:
+        return text
+    # Escape < and > to prevent HTML parsing
+    return text.replace("<", "&lt;").replace(">", "&gt;")
+
+
 def run_single_model(
     image_input: Optional[PIL.Image.Image],
     video_input: Optional[str],
@@ -82,6 +93,7 @@ def run_single_model(
     do_sample: bool,
     max_new_tokens: int,
     enable_thinking: bool,
+    thinking_budget: int,
 ) -> str:
     """Run single model inference using the chat method."""
     if not prompt and not image_input and not video_input:
@@ -114,15 +126,18 @@ def run_single_model(
                 temperature=0.6 if do_sample else 0.0,
                 enable_thinking=enable_thinking,
                 enable_thinking_budget=enable_thinking,
+                thinking_budget=thinking_budget,
                 max_pixels=optimal_max_pixels,
             )
 
-            # Format output
+            # Format output with HTML escaping
             if enable_thinking and thinking:
+                response = escape_special_tokens(response)
                 return f"**Thinking:**\n```text\n{thinking}\n```\n\n**Response:**\n{response}"
             else:
-                thinking = response[:response.find("Final answer: ") + 13].strip()
-                response2 = response[response.find("Final answer: ") + 13:].strip()
+                thinking = response[: response.find("Final answer: ") + 13].strip()
+                response2 = response[response.find("Final answer: ") + 13 :].strip()
+                response2 = escape_special_tokens(response2)
                 return f"**Pseudo Thinking (CoT):**\n```text\n{thinking}\n```\n\n**Response:**\n{response2}"
             # return response
 
@@ -151,7 +166,6 @@ def run_single_model(
                 ]
             else:
                 messages = [{"role": "user", "content": prompt}]
-
             # Preprocess inputs
             input_ids, pixel_values, grid_thws = model.preprocess_inputs(
                 messages=messages,
@@ -160,7 +174,6 @@ def run_single_model(
                 min_pixels=448 * 448,
                 max_pixels=optimal_max_pixels,
             )
-
             # Move to device
             device = next(model.parameters()).device
             input_ids = input_ids.to(device)
@@ -180,6 +193,7 @@ def run_single_model(
                     do_sample=do_sample,
                     enable_thinking=enable_thinking,
                     enable_thinking_budget=enable_thinking,
+                    thinking_budget=thinking_budget,
                     eos_token_id=model.text_tokenizer.eos_token_id,
                     pad_token_id=model.text_tokenizer.pad_token_id,
                 )
@@ -193,15 +207,16 @@ def run_single_model(
                 thinking_end = response_text.find("</think>")
                 thinking = response_text[thinking_start:thinking_end].strip()
                 response = response_text[thinking_end + 8 :].strip()
-
+                response = escape_special_tokens(response)
                 return f"**Thinking:**\n```text\n{thinking}\n```\n\n**Response:**\n{response}"
             else:
                 # Clean up the response by removing any system tokens
                 response = (
                     response_text.replace("<|im_start|>", "").replace("<|im_end|>", "").strip()
                 )
-                thinking = response[:response.find("Final answer: ") + 13].strip()
-                response2 = response[response.find("Final answer: ") + 13:].strip()
+                thinking = response[: response.find("Final answer: ") + 13].strip()
+                response2 = response[response.find("Final answer: ") + 13 :].strip()
+                response2 = escape_special_tokens(response2)
                 return f"**Pseudo Thinking (CoT):**\n```text\n{thinking}\n```\n\n**Response:**\n{response2}"
 
     except Exception as e:
@@ -288,15 +303,31 @@ def build_demo(model_path: str, gpu: int):
                 prompt_input = gr.Textbox(
                     label="Prompt",
                     placeholder="Enter your prompt here... (Press Enter to submit)",
-                    value="<image>\n## You are a professional house construction inspector. Your job is to examine the provided image and determine if there is any defect. You need to guess the space, defect type, defect description, material part, and location in the image of the image.\n\nYou must output the answer in the json format with the following fields:\n- space: [Space name from the list of Spaces]\n- defect_present: Yes / No\n- If Yes, also include:\n  - defect_type: [type from the list of Defect Types]\n  - defect_description: [brief description of the defect]\n  - material_part: [material part from the list of Material Parts]\n  - location_in_image: [describe location within the image, if applicable]\n\n### Instructions\n- Carefully examine each part of the image.\n- Identify the space of the image.\n- Identify the material part of the image.\n- Identify the defect type of the image.\n- Identify the defect description of the image.\n- Identify the location in the image of the image.\n",
+                    value="You are a helpful AI assistant. Respond in English.",
                     lines=3,
                 )
                 with gr.Accordion("Generation Settings", open=True):
                     do_sample = gr.Checkbox(label="Enable Sampling (Do Sample)", value=False)
                     max_new_tokens = gr.Slider(
-                        minimum=1024, maximum=4192, value=2048, step=1024, label="Max New Tokens"
+                        minimum=1024, maximum=6144, value=2048, step=1024, label="Max New Tokens"
                     )
-                    enable_thinking = gr.Checkbox(label="Deep Thinking", value=False)
+                    enable_thinking = gr.Checkbox(label="Deep Thinking", value=True)
+                    thinking_budget = gr.Slider(
+                        minimum=512, maximum=4096, value=1024, step=512, label="Thinking Budget"
+                    )
+
+                with gr.Accordion("Example Prompts", open=True):
+                    gr.Markdown("Click any example below to use it as your prompt:")
+                    example_btn1 = gr.Button("Grounding (box)", variant="secondary", size="sm")
+                    example_btn2 = gr.Button("Grounding (point)", variant="secondary", size="sm")
+                    example_btn3 = gr.Button(
+                        "Grounding (target a specific object)", variant="secondary", size="sm"
+                    )
+                    example_btn4 = gr.Button(
+                        "Complex math problem, with Final answer instruction (CoT)",
+                        variant="secondary",
+                        size="sm",
+                    )
 
                 with gr.Row():
                     clear_btn = gr.Button("Clear", variant="secondary", scale=1)
@@ -320,6 +351,7 @@ def build_demo(model_path: str, gpu: int):
             do_sample,
             max_new_tokens,
             enable_thinking,
+            thinking_budget,
         ]
 
         generate_btn.click(
@@ -339,12 +371,24 @@ def build_demo(model_path: str, gpu: int):
             outputs=[output_display, image_input, video_input, prompt_input, input_type_radio],
         ).then(fn=toggle_media_input, inputs=input_type_radio, outputs=[image_input, video_input])
 
+        # Example prompt event handlers
+        example_prompts = [
+            "For each person in the image, please provide the bounding box coordinates.",
+            "For each person in the image, please provide the point coordinates.",
+            "Find the <ref>red apple</ref> in the image. Please provide the bounding box coordinates.",
+            "A large square touches another two squares, as shown in the picture. The numbers inside the smaller squares indicate their areas. What is the area of the largest square?\nEnd your response with 'Final answer: '.",
+        ]
+        example_btn1.click(fn=lambda: example_prompts[0], outputs=[prompt_input])
+        example_btn2.click(fn=lambda: example_prompts[1], outputs=[prompt_input])
+        example_btn3.click(fn=lambda: example_prompts[2], outputs=[prompt_input])
+        example_btn4.click(fn=lambda: example_prompts[3], outputs=[prompt_input])
+
     return demo
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Gradio interface for Ovis.")
-    parser.add_argument("--model-path", type=str)
+    parser.add_argument("--model-path", default="AIDC-AI/Ovis2.5-9B", type=str)
     parser.add_argument("--gpu", type=int, default=0, help="GPU index to run the model.")
     parser.add_argument("--port", type=int, default=9901, help="Port to run the Gradio service.")
     parser.add_argument(

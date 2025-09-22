@@ -45,13 +45,12 @@ def has_tool_calls(text: str) -> bool:
     return "{Crop" in text if text else False
 
 
-def process_qna_sample(sample: Dict[str, Any], image_base_path: str = "") -> Dict[str, Any]:
+def process_qna_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert QnA format sample to standard conversation format
 
     Args:
         sample: QnA format sample with 'QnA' field
-        image_base_path: Base path for resolving relative image paths
 
     Returns:
         Sample in standard conversation format
@@ -86,16 +85,13 @@ def process_qna_sample(sample: Dict[str, Any], image_base_path: str = "") -> Dic
     return result
 
 
-def convert_jsonl_to_standard(
-    input_jsonl_path: str, output_json_path: str, image_base_path: str = ""
-):
+def convert_jsonl_to_standard(input_jsonl_path: str, output_json_path: str):
     """
     Convert JSONL file with QnA format to JSON with standard conversation format
 
     Args:
         input_jsonl_path: Path to input JSONL file
         output_json_path: Path to output JSON file
-        image_base_path: Base path for resolving image paths
     """
     converted_samples = []
 
@@ -108,7 +104,7 @@ def convert_jsonl_to_standard(
                     format_type = detect_format(sample)
 
                     if format_type == "qna":
-                        converted_sample = process_qna_sample(sample, image_base_path)
+                        converted_sample = process_qna_sample(sample)
                         converted_samples.append(converted_sample)
                     elif format_type == "conversation":
                         # Already in standard format
@@ -132,16 +128,14 @@ def main():
     parser = argparse.ArgumentParser(
         description="Convert QnA format to standard conversation format"
     )
-    parser.add_argument("input_file", help="Input JSONL file with QnA format")
-    parser.add_argument("output_file", help="Output JSON file with conversation format")
-    parser.add_argument("--image_base_path", default="", help="Base path for resolving image paths")
+    parser.add_argument("--input_file", type=str, default="refcoco_qa_pairs.jsonl",help="Input JSONL file with QnA format")
+    parser.add_argument("--output_file", type=str, default="refcoco_qa_pairs_train.json", help="Output JSON file with conversation format")
 
     args = parser.parse_args()
 
     convert_jsonl_to_standard(
         input_jsonl_path=args.input_file,
         output_json_path=args.output_file,
-        image_base_path=args.image_base_path,
     )
 
     print(f"Conversion completed: {args.input_file} -> {args.output_file}")
