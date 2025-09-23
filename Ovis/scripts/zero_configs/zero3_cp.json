@@ -1,8 +1,4 @@
 {
-    "compile": {
-      "enabled": true,
-      "backend": "inductor"
-    },
     "fp16": {
       "enabled": false
     },

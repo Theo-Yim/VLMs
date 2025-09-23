@@ -1,4 +1,7 @@
 #!/bin/bash
+# How to run: VLMs/Ovis$ sh scripts/run_ovis2_5_sft.sh
+
+export PYTHONPATH=/workspace/VLMs/Ovis:$PYTHONPATH
 
 set -e
 
@@ -23,22 +26,22 @@ CMDARG="--deepspeed scripts/zero_configs/zero1_cp.json \
   --min_frames 10 \
   --max_frames 10 \
   --train_modules all \
-  --multimodal_max_length 6000 \
+  --multimodal_max_length 7000 \
   --text_max_length 6000 \
-  --output_dir Ovis/checkpoints/$EXPNAME \
+  --output_dir checkpoints/$EXPNAME \
   --per_device_train_batch_size 2 \
   --gradient_accumulation_steps 16 \
-  --num_train_epochs 1 \
+  --num_train_epochs 2 \
   --eval_strategy no \
   --save_strategy steps \
   --save_steps 0.4 \
-  --save_total_limit 10 \
+  --save_total_limit 4 \
   --learning_rate 2e-5 \
   --max_grad_norm 1.0 \
   --weight_decay 0. \
   --warmup_ratio 0.1 \
   --lr_scheduler_type cosine \
-  --logging_steps 1 \
+  --logging_steps 10 \
   --tf32 True \
   --bf16 True \
   --dataloader_num_workers 8 \

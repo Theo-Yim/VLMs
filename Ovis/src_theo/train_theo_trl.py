@@ -4,23 +4,19 @@ Based on original Ovis training framework with custom modeling implementation
 """
 
 import os
+import pathlib
 import sys
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 import torch
-
-# Import custom Ovis2.5 implementation
 from ovis.model.modeling_ovis2_5 import Ovis2_5
-# from ovis.train.arguments import TrainingArguments as OvisTrainingArguments
-
-# Import original Ovis training components
 from ovis.train.dataset.conversation_dataset import ConversationDataset
 from ovis.train.dataset.multimodal_dataset import DataCollatorForMultimodalDataset
 from transformers import (
+    EarlyStoppingCallback,
     HfArgumentParser,
     set_seed,
-    EarlyStoppingCallback,
 )
 
 # Import TRL components
@@ -108,20 +104,26 @@ def create_dataset_info(training_args: CustomSFTConfig) -> Dict[str, Dict]:
 def split_ovis25_model():
     """
     Create device mapping for Ovis2.5 model to efficiently distribute across multiple GPUs.
+    Architecture:
+    - Visual processing: ViT (27 layers) + visual tokenizer head + VTE
+    - LLM: Qwen3-8B (36 layers) + embeddings + norm + lm_head
+    Data flow: Images -> ViT -> visual_head -> VTE -> merge with text embeddings -> LLM layers -> output
     """
     device_map = {}
     world_size = torch.cuda.device_count()
     if world_size < 2:
+        # Single GPU - put everything on GPU 0
         return "auto"
-
-    llm_layers = 36  # Qwen3-8B layers
-
-    device_map["visual_tokenizer.vit"] = 0  # Entire SigLIP ViT
+    # Load config to get layer counts
+    llm_layers = 36  # config.llm_config.num_hidden_layers  # 36 for Qwen3-8B
+    device_map["visual_tokenizer.vit"] = 0  # Entire SigLIP ViT (27 layers)
     device_map["visual_tokenizer.head"] = 0  # Visual projection head
     device_map["vte"] = 0  # Visual token embeddings
-    device_map["llm.model.embed_tokens"] = 0  # Text embeddings
-
+    device_map["llm.model.embed_tokens"] = 0  # Text embeddings (need to merge with visual)
+    # Distribute LLM layers across available GPUs
     if world_size == 2:
+        # GPU 0: Vision + embeddings + first few LLM layers
+        # GPU 1: Remaining LLM layers + norm + lm_head
         layers_gpu0 = 8  # Keep some LLM layers with embeddings
         for i in range(layers_gpu0):
             device_map[f"llm.model.layers.{i}"] = 0
@@ -130,7 +132,7 @@ def split_ovis25_model():
         device_map["llm.model.norm"] = 1
         device_map["llm.lm_head"] = 1
     elif world_size == 3:
-        layers_per_gpu = [10, 13, 13]
+        layers_per_gpu = [10, 13, 13]  # Slightly front-loaded due to vision processing
         layer_cnt = 0
         for gpu_id, num_layers in enumerate(layers_per_gpu):
             for i in range(num_layers):
@@ -139,7 +141,8 @@ def split_ovis25_model():
         device_map["llm.model.norm"] = 2
         device_map["llm.lm_head"] = 2
     else:  # world_size >= 4
-        layers_gpu0 = max(4, llm_layers // (world_size + 1))
+        # Reserve some layers for GPU 0 (vision processing) and last GPU (output)
+        layers_gpu0 = max(4, llm_layers // (world_size + 1))  # Front-load slightly
         layers_last_gpu = max(4, llm_layers // (world_size + 1))
         remaining_layers = llm_layers - layers_gpu0 - layers_last_gpu
         middle_gpus = world_size - 2
@@ -150,22 +153,21 @@ def split_ovis25_model():
             layers_per_middle_gpu = 0
             extra_layers = 0
             layers_last_gpu += remaining_layers
-
+        # GPU 0: First layers
         for i in range(layers_gpu0):
             device_map[f"llm.model.layers.{i}"] = 0
-
+        # Middle GPUs: Distribute remaining layers
         layer_cnt = layers_gpu0
         for gpu_id in range(1, world_size - 1):
             num_layers = layers_per_middle_gpu + (1 if gpu_id - 1 < extra_layers else 0)
             for i in range(num_layers):
                 device_map[f"llm.model.layers.{layer_cnt}"] = gpu_id
                 layer_cnt += 1
-
+        # Last GPU: Final layers + norm + lm_head
         for i in range(layer_cnt, llm_layers):
             device_map[f"llm.model.layers.{i}"] = world_size - 1
         device_map["llm.model.norm"] = world_size - 1
         device_map["llm.lm_head"] = world_size - 1
-
     return device_map
 
 
@@ -224,9 +226,7 @@ def main():
     set_seed(training_args.seed)
 
     # Set device for model loading (DeepSpeed will handle distribution)
-    device_map = (
-        f"cuda:{training_args.local_rank}" if training_args.local_rank != -1 else "cuda:0"
-    )
+    device_map = f"cuda:{training_args.local_rank}" if training_args.local_rank != -1 else "cuda:0"
 
     # Load model with device map
     print(f"Loading model from {model_args.model_path}...")
@@ -256,21 +256,22 @@ def main():
         model=model,
         training_args=training_args,
     )
-    
     print(f"Training dataset loaded: {len(train_dataset)} samples")
-    
+
     # Calculate max_steps to avoid dataloader length issues
     dataset_size = len(train_dataset)
-    effective_batch_size = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
+    effective_batch_size = (
+        training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
+    )
     steps_per_epoch = dataset_size // effective_batch_size
     if dataset_size % effective_batch_size != 0:
         steps_per_epoch += 1  # Round up for partial batches
-    
+
     print("Dataset analysis:")
     print(f"  - Dataset size: {dataset_size}")
     print(f"  - Effective batch size: {effective_batch_size}")
     print(f"  - Steps per epoch: {steps_per_epoch}")
-    
+
     # If max_steps is not set or is -1, calculate it
     if training_args.max_steps <= 0:
         calculated_max_steps = steps_per_epoch * training_args.num_train_epochs
@@ -278,15 +279,17 @@ def main():
         print(f"  - Auto-calculated max_steps: {calculated_max_steps}")
     else:
         print(f"  - Using configured max_steps: {training_args.max_steps}")
-    
+
     # Update eval and save steps if they're still fractional
     if training_args.eval_steps and training_args.eval_steps < 1:
         training_args.eval_steps = max(1, int(training_args.eval_steps * training_args.max_steps))
     if training_args.save_steps and training_args.save_steps < 1:
         training_args.save_steps = max(1, int(training_args.save_steps * training_args.max_steps))
     if training_args.warmup_steps < 1 and training_args.warmup_steps > 0:
-        training_args.warmup_steps = max(1, int(training_args.warmup_steps * training_args.max_steps))
-    
+        training_args.warmup_steps = max(
+            1, int(training_args.warmup_steps * training_args.max_steps)
+        )
+
     # Load validation dataset if provided
     eval_dataset = None
     if training_args.eval_data_path and os.path.exists(training_args.eval_data_path):
@@ -295,7 +298,7 @@ def main():
             f"{training_args.data_name}_eval": {
                 "meta_file": training_args.eval_data_path,
                 "storage_type": "hybrid",
-                "data_format": "conversation", 
+                "data_format": "conversation",
                 "image_dir": training_args.image_folder,
             }
         }
@@ -307,19 +310,19 @@ def main():
         )
         print(f"Validation dataset loaded: {len(eval_dataset)} samples")
     elif training_args.eval_data_path:
-        print(f"Warning: Validation dataset path {training_args.eval_data_path} not found. Skipping validation.")
+        print(f"Warning: Validation dataset {training_args.eval_data_path} not found. Skipping it.")
 
     # Use original data collator (SFTTrainer can work with custom data collators)
     data_collator = DataCollatorForMultimodalDataset(model.text_tokenizer)
 
     # Initialize SFTTrainer with correct parameters
     print("Initializing SFTTrainer...")
-    
+
     # Add early stopping callback if eval dataset is provided
     callbacks = []
     if eval_dataset:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=3))
-    
+
     trainer = SFTTrainer(
         model=model,
         args=training_args,  # SFTConfig containing all training parameters
@@ -334,7 +337,18 @@ def main():
     # Training
     print("Starting SFT training...")
     print(f"Training with early stopping: {'enabled' if eval_dataset else 'disabled'}")
-    trainer.train()
+    # Check for existing checkpoints and resume automatically
+    checkpoint_dir = pathlib.Path(training_args.output_dir)
+    existing_checkpoints = list(checkpoint_dir.glob("checkpoint-*"))
+    if existing_checkpoints:
+        # Find the latest checkpoint
+        latest_checkpoint = max(existing_checkpoints, key=lambda x: int(x.name.split("-")[1]))
+        print(f"Found existing checkpoint: {latest_checkpoint}")
+        print(f"Resuming training from checkpoint: {latest_checkpoint}")
+        trainer.train(resume_from_checkpoint=str(latest_checkpoint))
+    else:
+        print("No existing checkpoints found. Starting training from scratch.")
+        trainer.train()
 
     # Save model
     print("Saving model...")

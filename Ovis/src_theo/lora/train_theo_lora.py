@@ -207,7 +207,7 @@ def main():
     
     # Create dataset using original ConversationDataset
     print(f"Loading training dataset from {training_args.data_path}...")
-    train_dataset = ConversationBboxDataset(
+    train_dataset = ConversationDataset(
         name=training_args.data_name,
         info=dataset_info[training_args.data_name],
         model=model,
@@ -256,7 +256,7 @@ def main():
                 "image_dir": training_args.image_folder,
             }
         }
-        eval_dataset = ConversationBboxDataset(
+        eval_dataset = ConversationDataset(
             name=f"{training_args.data_name}_eval",
             info=eval_dataset_info[f"{training_args.data_name}_eval"],
             model=model,

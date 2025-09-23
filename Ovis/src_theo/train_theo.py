@@ -4,26 +4,22 @@ Based on original Ovis training framework with custom modeling implementation
 """
 
 import os
+import pathlib
 import sys
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 import torch
-
-# Import custom Ovis2.5 implementation
 from ovis.model.modeling_ovis2_5 import Ovis2_5
 from ovis.train.arguments import TrainingArguments as OvisTrainingArguments
-
-# Import original Ovis training components
 from ovis.train.dataset.conversation_dataset import ConversationDataset
 from ovis.train.dataset.multimodal_dataset import DataCollatorForMultimodalDataset
 from transformers import (
+    EarlyStoppingCallback,
     HfArgumentParser,
     Trainer,
     set_seed,
-    EarlyStoppingCallback,
 )
-# from trl import SFTConfig, SFTTrainer
 
 try:
     import flash_attn
@@ -31,9 +27,6 @@ try:
     HAS_FLASH_ATTN = True
 except ImportError:
     HAS_FLASH_ATTN = False
-
-# Import constants from the model
-# from ovis.utils.constants import INDICATOR_IDS, VISUAL_ATOM_ID
 
 
 @dataclass
@@ -73,27 +66,6 @@ def create_dataset_info(training_args: CustomTrainingArguments) -> Dict[str, Dic
             "image_dir": training_args.image_folder,
         }
     }
-
-
-# def create_device_map(gpu_ids):
-#     """
-#     Create device map for Ovis2_5 model components across multiple GPUs.
-#     Args:
-#         gpu_ids: List of GPU IDs to use
-#     Returns:
-#         device_map: Dictionary mapping model components to GPUs
-#     """
-#     if len(gpu_ids) < 2:
-#         return f"cuda:{gpu_ids[0]}"
-#     # id 0: Vision components (vte, visual_tokenizer)
-#     # id 1~: LLM components (llm)
-#     device_map = {"vte": gpu_ids[0], "visual_tokenizer": gpu_ids[0]}
-#     if len(gpu_ids) < 3:
-#         device_map["llm"] = gpu_ids[1]
-#     else:
-#         device_map["llm"] = gpu_ids[1]
-#         # TODO: For 3+ GPUs, we should distribute LLM layers further
-#     return device_map
 
 
 def split_ovis25_model():
@@ -221,9 +193,7 @@ def main():
     set_seed(training_args.seed)
 
     # Set device for model loading (DeepSpeed will handle distribution)
-    device_map = (
-        f"cuda:{training_args.local_rank}" if training_args.local_rank != -1 else "cuda:0"
-    )
+    device_map = f"cuda:{training_args.local_rank}" if training_args.local_rank != -1 else "cuda:0"
 
     # Load model with device map
     print(f"Loading model from {model_args.model_path}...")
@@ -254,21 +224,22 @@ def main():
         model=model,
         training_args=training_args,
     )
-    
     print(f"Training dataset loaded: {len(train_dataset)} samples")
-    
+
     # Calculate max_steps to avoid dataloader length issues
     dataset_size = len(train_dataset)
-    effective_batch_size = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
+    effective_batch_size = (
+        training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
+    )
     steps_per_epoch = dataset_size // effective_batch_size
     if dataset_size % effective_batch_size != 0:
         steps_per_epoch += 1  # Round up for partial batches
-    
+
     print("Dataset analysis:")
     print(f"  - Dataset size: {dataset_size}")
     print(f"  - Effective batch size: {effective_batch_size}")
     print(f"  - Steps per epoch: {steps_per_epoch}")
-    
+
     # If max_steps is not set or is -1, calculate it
     if training_args.max_steps <= 0:
         calculated_max_steps = steps_per_epoch * training_args.num_train_epochs
@@ -276,15 +247,17 @@ def main():
         print(f"  - Auto-calculated max_steps: {calculated_max_steps}")
     else:
         print(f"  - Using configured max_steps: {training_args.max_steps}")
-    
+
     # Update eval and save steps if they're still fractional
     if training_args.eval_steps and training_args.eval_steps < 1:
         training_args.eval_steps = max(1, int(training_args.eval_steps * training_args.max_steps))
     if training_args.save_steps and training_args.save_steps < 1:
         training_args.save_steps = max(1, int(training_args.save_steps * training_args.max_steps))
     if training_args.warmup_steps < 1 and training_args.warmup_steps > 0:
-        training_args.warmup_steps = max(1, int(training_args.warmup_steps * training_args.max_steps))
-    
+        training_args.warmup_steps = max(
+            1, int(training_args.warmup_steps * training_args.max_steps)
+        )
+
     # Load validation dataset if provided
     eval_dataset = None
     if training_args.eval_data_path and os.path.exists(training_args.eval_data_path):
@@ -293,7 +266,7 @@ def main():
             f"{training_args.data_name}_eval": {
                 "meta_file": training_args.eval_data_path,
                 "storage_type": "hybrid",
-                "data_format": "conversation", 
+                "data_format": "conversation",
                 "image_dir": training_args.image_folder,
             }
         }
@@ -305,7 +278,7 @@ def main():
         )
         print(f"Validation dataset loaded: {len(eval_dataset)} samples")
     elif training_args.eval_data_path:
-        print(f"Warning: Validation dataset path {training_args.eval_data_path} not found. Skipping validation.")
+        print(f"Warning: Validation dataset {training_args.eval_data_path} not found. Skipping it.")
 
     # Use original data collator
     data_collator = DataCollatorForMultimodalDataset(model.text_tokenizer)
@@ -315,7 +288,7 @@ def main():
     callbacks = []
     if eval_dataset:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=3))
-    
+
     # trainer = SFTTrainer(
     trainer = Trainer(
         model=model,
@@ -329,7 +302,18 @@ def main():
     # Training
     print("Starting training...")
     print(f"Training with early stopping: {'enabled' if eval_dataset else 'disabled'}")
-    trainer.train()
+    # Check for existing checkpoints and resume automatically
+    checkpoint_dir = pathlib.Path(training_args.output_dir)
+    existing_checkpoints = list(checkpoint_dir.glob("checkpoint-*"))
+    if existing_checkpoints:
+        # Find the latest checkpoint
+        latest_checkpoint = max(existing_checkpoints, key=lambda x: int(x.name.split("-")[1]))
+        print(f"Found existing checkpoint: {latest_checkpoint}")
+        print(f"Resuming training from checkpoint: {latest_checkpoint}")
+        trainer.train(resume_from_checkpoint=str(latest_checkpoint))
+    else:
+        print("No existing checkpoints found. Starting training from scratch.")
+        trainer.train()
 
     # Save model
     print("Saving model...")

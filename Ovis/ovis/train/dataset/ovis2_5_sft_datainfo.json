@@ -10,5 +10,11 @@
         "storage_type": "hybrid",
         "data_format": "conversation",
         "image_dir": "/workspace/VLMs/Ovis/src_theo/sample_data/"
+    },
+    "refcoco_croptool_v1": {
+        "meta_file": "/mnt/nas1/data/coco/refcoco_vlm_results_theo_ready_to_train/refcoco_qa_pairs_croptool.json",
+        "storage_type": "hybrid",
+        "data_format": "conversation",
+        "image_dir": "/mnt/nas1/data/"
     }
 }
