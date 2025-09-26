@@ -353,6 +353,9 @@ def main():
     # Save model
     print("Saving model...")
     trainer.save_model()
+    trainer.tokenizer.save_pretrained(training_args.output_dir)
+    if hasattr(model, 'visual_tokenizer') and hasattr(model.visual_tokenizer, 'image_processor'):
+        model.visual_tokenizer.image_processor.save_pretrained(training_args.output_dir)
     trainer.save_state()
 
     print("SFT training completed!")

@@ -1,244 +1,198 @@
 # Tool System for Ovis2.5
 
-Train Ovis2.5 to use tools during generation with visual feedback loops.
+**Zero-configuration tool system** with auto-detection and real-time execution during generation.
 
-**Key Features**:
-- **Trained Tools**: Model learns tool usage during training (e.g., crop tool)
-- **LLM-Driven Tools**: Instant tool addition via descriptions (no training needed)
-- **Real-time Execution**: Tools execute during generation, not after
-- **Visual Feedback**: Tool results fed back into generation context immediately
+## Key Features
+
+- **🔍 Auto-Detection**: Automatically finds and registers all `*_tool.py` files
+- **⚡ Real-time Execution**: Tools execute during generation with pause/resume
+- **🖼️ Visual Feedback**: Tool results (images, text) instantly fed back to model
+- **📝 LLM Guidance**: Tool docstrings automatically guide model usage
+- **🏗️ Unified Architecture**: All tools follow the same simple ToolBase pattern
 
 ## System Architecture
 
 ```
-Standard Conversation Data → ConversationDataset → Training
-                 ↓                    ↓
-    Tool Call Detection     Multimodal Sequence → [text, tool_call, cropped_img, text]
-                                     ↓
-                             Ovis2.5 Processing
-                             ↓                    ↓
-                       Text Tokenization    Visual Processing
-                       (includes coords)    (original + crops)
+Generation: "I see a person <tool_call>Crop [100,100,200,200]</tool_call>"
+                                           ↓ PAUSE & EXECUTE
+                              ToolRegistry (scans *_tool.py files)
+                                           ↓
+                               CropTool.execute() → cropped_image
+                                           ↓ RESUME WITH RESULT
+Generation: " The person is wearing a blue jacket."
 ```
 
-## Components
+## Core Components
 
-### 1. **CropTool** (`src_theo/utils/crop_tool.py`)
-- `extract_tool_calls(text)` - Parse `<tool_call>Crop [x1,y1,x2,y2]</tool_call>`
-- `crop_image(image, coords)` - Crop image regions 
-- `create_multimodal_content(text, image)` - Create training sequences
-- `parse_and_replace_tool_calls(text)` - Format conversion
-
-### 2. **ToolRegistry** (`conversation_dataset.py`)
-- Detects available tools and routes processing
-- Extensible: `register_tool()`, `detect_tool_calls()`, `process_text_with_tools()`
-
-### 3. **ConversationDataset** (Modified)
-- Detects tool calls in assistant messages
-- Creates multimodal sequences via ToolRegistry
-- Handles multimodal content during tokenization
-
-## Multimodal Sequence Example
-
+### **ToolBase** (`tool_base.py`)
 ```python
-# ConversationDataset + CropTool creates:
-{
-  "role": "assistant",
-  "content": [
-    {"type": "text", "text": "<tool_call>Crop [100,100,200,200]</tool_call>"},
-    {"type": "image", "image": <cropped_region>},  # Right after tool call
-    {"type": "text", "text": " The person is walking."}
-  ]
-}
+class ToolBase:
+    def extract_tool_call(self, text: str) -> Dict  # Parse tool calls
+    def execute(self, image, parameters) -> Dict    # Execute & return result
 ```
 
-## Training Behavior
-
-**Model Learns:**
-- **Coordinate Generation**: Output valid bounding boxes as text tokens
-- **Spatial Mapping**: Map descriptions ("person in blue") to regions  
-- **Tool Integration**: Use crop tools within conversation flow
-- **Visual Feedback**: See crop results immediately after coordinate generation
-
-**Gradient Flow:**
-- Coordinates treated as regular text tokens (full gradient flow)
-- Visual feedback enables coordinate accuracy learning
-
-## Technical Design
-
-**Key Decisions:**
-1. **Coordinates as Text**: Treat `[100,100,200,200]` as regular tokens
-2. **Visual Feedback**: Cropped images right after tool calls in sequences
-3. **Native Processing**: Use Ovis2.5's existing multimodal capabilities
-4. **Modular Tools**: ToolRegistry for extensibility
-
-**Ovis2.5 Spatial Capabilities:**
-- SigLIP vision tower with spatial patch embeddings
-- 2D rotary embeddings for positional awareness  
-- `grid_thws` maintains spatial structure
-
-## Training Flow
-
+### **ToolRegistry** (`tool_base.py`)
 ```python
-# 1. ConversationDataset detects tool calls in assistant messages
-# 2. ToolRegistry routes to CropTool.create_multimodal_content()
-# 3. Creates sequence: [text, tool_call, cropped_image, remaining_text]
-# 4. Ovis2.5 processes all images together via torch.cat(pixel_values, dim=0)
-# 5. Text tokenization includes coordinates as regular tokens
-# 6. Model learns coordinate generation through visual feedback
+registry = ToolRegistry()  # Auto-detects all *_tool.py files
+registry.tools             # {'crop': CropTool(), 'identify': IdentifyTool()}
+registry.detect_tool_call(text)     # Find tool calls in text
+registry.execute_tool_call(call, image)  # Execute tool calls
 ```
 
-## Data Format
+### **Available Tools**
 
-**Input:**
-```json
-{"from": "gpt", "value": "<tool_call>Crop [100,100,200,200]</tool_call> Walking"}
-```
+**CropTool** (`crop_tool.py`): `<tool_call>Crop [x1,y1,x2,y2]</tool_call>`
+- Crops image regions → returns cropped image
 
-**Training Sequence:**
+**IdentifyTool** (`mock_id_tool.py`): `<tool_call>Identify [x1,y1,x2,y2]</tool_call>`
+- Mock identification → returns text result
+
+## How It Works
+
+### **1. Auto-Detection on Startup**
 ```python
-[
-  {"type": "text", "text": "<tool_call>Crop [100,100,200,200]</tool_call>"},
-  {"type": "image", "image": <cropped_region>},
-  {"type": "text", "text": " Walking"}
-]
+# ToolRegistry scans tools/ directory for *_tool.py files
+# Automatically imports and registers any ToolBase subclasses
+registry = ToolRegistry()
+# Found: crop_tool.py → CropTool → registered as "crop"
+# Found: mock_id_tool.py → IdentifyTool → registered as "identify"
 ```
 
-## Expected Capabilities
-
-**Coordinate Generation:**
-- Generate meaningful bounding box coordinates as text
-- Map descriptions ("person in blue") to spatial regions
-- Handle multiple crop operations in reasoning chains
-
-**Tool Integration:**
-- Use crop tools within conversational responses
-- Perform analysis on cropped regions
-- Integrate crop insights with broader context
-
-## Adding New Tools
-
-1. **Create Tool Class:**
+### **2. Real-time Execution During Generation**
 ```python
-class NewTool:
-    def extract_tool_calls(self, text): ...
-    def create_multimodal_content(self, text, image): ...
+# Model generates: "I see a person <tool_call>Crop [100,100,200,200]</tool_call>"
+# ↓ System detects "</tool_call>" → PAUSE generation
+# ↓ Execute: CropTool.crop_image(image, [100,100,200,200]) → cropped_image
+# ↓ Add cropped_image to conversation context
+# ↓ RESUME generation: " The person is wearing a blue jacket."
 ```
 
-2. **Register in ToolRegistry:**
+### **3. Technical Implementation**
+- **Token-by-token** generation inside `<tool_call>` for precise detection
+- **Batch generation** outside tool calls for efficiency
+- **Context rebuilding** after tool execution via `model.preprocess_inputs()`
+- **Structured results**: Tools return `{"type": "image|text", "content": ...}`
+
+## Creating New Tools
+
+### **Step 1: Create Tool File**
 ```python
-self.register_tool('newtool', NewTool())
+# save as: draw_tool.py
+
+from .tool_base import ToolBase
+
+class DrawTool(ToolBase):
+    """
+    Tool for drawing annotations on images.
+    Usage: <tool_call>Draw [description]</tool_call>
+    Example: <tool_call>Draw [red circle around person]</tool_call>
+    """
+
+    def __init__(self):
+        self.tool_call_pattern = r"<tool_call>Draw \[([^]]+)\]</tool_call>"
+
+    def extract_tool_call(self, text: str):
+        match = re.search(self.tool_call_pattern, text)
+        if match:
+            return {
+                "parameters": [match.group(1)],
+                "tool_name": "draw",
+                "tool_instance": self
+            }
+        return None
+
+    def execute(self, image, parameters):
+        description = parameters[0]
+        # Draw annotation on image based on description
+        annotated_image = self.draw_annotation(image, description)
+        return {"type": "image", "content": annotated_image}
 ```
 
-System automatically detects and routes new tool calls.
+### **Step 2: That's It!**
+```bash
+# Just save the file as draw_tool.py in the tools/ directory
+# ToolRegistry automatically detects and registers it on next startup
+```
 
-## Inference Usage
+**The docstring is crucial** - it tells the LLM:
+- When to use the tool
+- Exact syntax: `<tool_call>Draw [...]</tool_call>`
+- Parameter format and examples
 
-Noe that LLM will stop the inference when it sees </tool_call> and calls the tool. Return values of tool will be instantly fed into the inference process right after </tool_call> before LLM continues the process.
+## Usage Examples
 
-### Basic Usage
-
+### **Basic Inference**
 ```python
-from src_theo.tools.inference_integration_v2 import (
-    chat_with_tool_execution_batch,
-    chat_with_tool_execution_streaming,
-    GenerationConfig
-)
+from src_theo.tools.inference_integration import chat_with_tool_execution
 
 # Load model
 model = AutoModelForCausalLM.from_pretrained("AIDC-AI/Ovis2.5-9B", trust_remote_code=True)
-config = GenerationConfig(tool_timeout=15.0)
 
-# Batch generation (production-focused)
-response, thinking, history = chat_with_tool_execution_batch(
+# Chat with automatic tool execution
+response, thinking, history = chat_with_tool_execution(
     model=model,
-    prompt="Examine this image in detail",
+    prompt="<image>Examine this person's clothing in detail",
     images=[image],
-    config=config
+    temperature=0.6,
+    max_new_tokens=1024
 )
 
-# Streaming generation (interactive UI-focused)
-response, thinking, history = chat_with_tool_execution_streaming(
-    model=model,
-    prompt="Examine this image in detail",
-    images=[image],
-    config=config
-)
-
-# Model flow (example with Crop tool):
-# 1. Generates: "Let me examine this person. <tool_call>Crop [100,100,200,200]</tool_call>"
-# 2. System IMMEDIATELY detects "</tool_call>" → pauses generation
-# 3. System executes crop → feeds cropped image back into model context
-# 4. Model continues with cropped image: " The person is wearing a blue shirt."
-
-# Works with ANY registered tool.
+# Model might generate:
+# "I can see a person. <tool_call>Crop [100,100,300,400]</tool_call>
+# The person is wearing a blue denim jacket with silver buttons."
 ```
 
-### Tool Types
-
-**1. Trained Tools (use_tool_descriptions=False)**
+### **Multi-turn Conversations**
 ```python
-# Model uses learned patterns from training
-response = chat_with_tool_execution_batch(
+history = []
+
+# Turn 1
+response1, _, history = chat_with_tool_execution(
     model=model,
-    prompt="Analyze this image",
+    prompt="<image>What do you see?",
     images=[image],
-    use_tool_descriptions=False  # Default trained behavior
+    history=history
+)
+
+# Turn 2 - maintains context including any tool results
+response2, _, history = chat_with_tool_execution(
+    model=model,
+    prompt="Focus on the person's accessories",
+    history=history
 )
 ```
 
-**2. LLM-Driven Tools (use_tool_descriptions=True)**
+### **Debug Mode**
 ```python
-# Register new tool instantly
-tool_registry = ToolRegistry()
-tool_registry.register_tool("draw", DrawingTool(), {
-    "name": "draw",
-    "description": "Draw shapes or annotations on the image",
-    "usage": "<tool_call>Draw [action]</tool_call>",
-    "example": "<tool_call>Draw [red box around person]</tool_call>"
-})
+from src_theo.tools.inference_integration import enable_debug_logging
+enable_debug_logging()
 
-# LLM automatically uses tools based on descriptions
-response = chat_with_tool_execution_batch(
-    model=model,
-    prompt="Analyze and highlight regions",
-    images=[image],
-    use_tool_descriptions=True  # Enable LLM-driven tool selection
-)
-```
-
-### Adding New Tools
-
-**Method 1: Built-in Registration (for training)**
-```python
-# Add to _setup_tools() in inference_integration_v2.py
-self.tools["new_tool"] = NewTool()
-```
-
-**Method 2: Runtime Registration (instant tools)**
-```python
-class NewTool:
-    def extract_tool_calls(self, text): ...
-    def execute(self, image, parameters): ...
-
-tool_registry.register_tool("new_tool", NewTool(), {
-    "name": "new_tool",
-    "description": "Tool description for LLM",
-    "usage": "<tool_call>NewTool [params]</tool_call>"
-})
-```
-
-### Debug Logging
-
-```bash
+# Or set environment variable
 export OVIS_TOOL_DEBUG=true
-python your_script.py
 ```
 
-### Examples
+## Tool Reference
 
-See `example_usage.py` for complete examples including:
-- Basic batch/streaming generation
-- Trained vs LLM-driven tool usage
-- Multi-turn conversations
-- Performance benchmarking
+### **Current Tools**
+
+| Tool | Syntax | Purpose | Returns |
+|------|--------|---------|---------|
+| **Crop** | `<tool_call>Crop [x1,y1,x2,y2]</tool_call>` | Crop image regions | Cropped image |
+| **Identify** | `<tool_call>Identify [x1,y1,x2,y2]</tool_call>` | Mock identification | Text result |
+
+### **Tool Result Types**
+```python
+{"type": "image", "content": PIL_Image}        # Visual result
+{"type": "text", "content": "text response"}  # Text result
+```
+
+## Quick Start
+
+1. **Create a tool**: `my_tool.py` with ToolBase subclass
+2. **Add docstring**: LLM usage instructions
+3. **Save in tools/**: Auto-detected on startup
+4. **Use in inference**: Model automatically uses based on context
+
+## Examples
+
+See `example_usage.py` for complete working examples.

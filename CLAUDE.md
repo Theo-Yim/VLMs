@@ -8,7 +8,7 @@ This is a Vision-Language Models (VLMs) research repository containing implement
 
 - **Ovis** - Open VISion model with structural embedding alignment
 - **InternVL3** - International Vision-Language model series
-- **Custom Trainers** - Specialized training implementations for Ovis2.5 and QwenVL2.5
+- **Custom Trainers** - (Not used) Specialized training implementations for Ovis2.5 and QwenVL2.5
 - **Utils** - Supporting utilities and tools
 
 ## Architecture
@@ -18,7 +18,7 @@ This is a Vision-Language Models (VLMs) research repository containing implement
 - `Ovis/` - Complete Ovis model implementation with HuggingFace integration, training scripts, and inference
 - `InternVL3/` - InternVL3.5 models with LoRA fine-tuning support and RefCOCO evaluation
 - `custom_trainer/` - Enhanced training implementations with two-stage training (SFT + R-GRPO)
-- `utils/` - Shared utilities including video frame extraction and experimental code
+- `utils/` - Shared utilities including LH_POC-related files and video frame extraction and experimental code
 
 ### Model-Specific Architectures
 
@@ -40,20 +40,14 @@ This is a Vision-Language Models (VLMs) research repository containing implement
 ### Ovis Training
 
 ```bash
-# Install Ovis dependencies
-cd Ovis
-pip install -r requirements.txt
-pip install -e .
-
 # Official training script
-bash scripts/run_ovis2_5_sft.sh
+bash Ovis/scripts/run_ovis2_5_sft.sh
 
-# Custom trainer with both SFT and R-GRPO stages
-cd custom_trainer/Ovis2.5
-python train_ovis25.py --stage both --use_lora --bf16
+# Custom trainer
+bash Ovis/src_theo/tran_launch.sh
 
 # LoRA training (recommended for memory efficiency)
-python train_ovis25.py --use_lora --lora_r 128 --lora_alpha 256
+bash Ovis/src_theo/lora/train_launch_lora.sh
 ```
 
 ### InternVL3 Training
@@ -98,31 +92,26 @@ python InternVL3/inference_vd.py
 python InternVL3/inference_simple.py
 ```
 
-## Critical Requirements
-
-### Ovis2.5 Constraints
-- **MUST use batch_size=1** - Native resolution processing prevents batching
-- Use `gradient_accumulation_steps` for effective batch size
-- LoRA training strongly recommended for memory efficiency
-- Requires `lora_patch.py` for LoRA compatibility
-
-### Memory Requirements
-- Ovis2.5 inference: ~18GB VRAM
-- Ovis2.5 LoRA training: ~24-28GB VRAM
-- InternVL3 LoRA training: ~16-24GB VRAM depending on batch size
-
 ## Data Formats
 
 ### Ovis Training Data (JSONL)
 ```json
 {
-  "image_path": "path/to/image.jpg",
-  "QnA": [
+  "conversations": [
     {
-      "Q": "Question text",
-      "A3": "<think>reasoning</think>\n<answer>response</answer>"
-    }
-  ]
+      "id": "sample_001",
+      "image": "cat_on_table.jpg",
+      "conversations": [
+        {
+          "from": "human",
+          "value": "<image>\nWhat do you see in this image?"
+        },
+        {
+          "from": "gpt",
+          "value": "I see a beautiful orange tabby cat sitting on a wooden table. The cat appears to be relaxed and is looking directly at the camera. The background shows a cozy indoor setting with soft lighting."
+        }
+      ]
+    },
 }
 ```
 
