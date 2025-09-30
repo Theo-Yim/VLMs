@@ -1,0 +1,2702 @@
+{
+    "공간": {
+        "MDF실": {
+            "description": "A room or space where the Main Distribution Frame (MDF), a signal distribution frame for telephone systems, is located.",
+            "english": "MDF Room",
+            "mapped": "MDF실"
+        },
+        "P.D": {
+            "description": "A term referring to the development of public facilities or infrastructures in a building or housing complex",
+            "english": "Public Development",
+            "mapped": "P.D"
+        },
+        "UBR": {
+            "description": "All in one prefabricated bathroom unit.",
+            "english": "Unit Bath Room",
+            "mapped": "UBR"
+        },
+        "감시실": {
+            "description": "A room serving as an operations center where a facility or service can be monitored and controlled.",
+            "english": "Control Room",
+            "mapped": "감시실"
+        },
+        "거실": {
+            "description": "A room in a house for general and informal everyday activities",
+            "english": "Living Room",
+            "mapped": "거실"
+        },
+        "거실2": {
+            "description": "A room in a house for general and informal everyday activities",
+            "english": "Living Room",
+            "mapped": "거실2"
+        },
+        "게시": {
+            "description": "A space or board in a building where notices, announcements, or information are displayed",
+            "english": "Bulletin",
+            "mapped": "게시"
+        },
+        "경로당": {
+            "description": "A designated space or room in a building specifically for the use and activities of elderly people",
+            "english": "Senior Citizens' Center",
+            "mapped": "경로당"
+        },
+        "경비실": {
+            "description": "A room in a building designated for security personnel",
+            "english": "Guardroom",
+            "mapped": "경비실"
+        },
+        "계단": {
+            "description": "A set of steps leading from one floor of a building to another",
+            "english": "Staircase",
+            "mapped": "계단"
+        },
+        "계단실": {
+            "description": "A set of stairs and its surrounding walls or structure within a building",
+            "english": "Staircase",
+            "mapped": "계단실"
+        },
+        "고가수조": {
+            "description": "A structure used for storing water at a height to create pressure for distribution in a building",
+            "english": "High water tank",
+            "mapped": "고가수조"
+        },
+        "공동구": {
+            "description": "A communal area within a building that is accessible to all residents or occupants",
+            "english": "Shared Space",
+            "mapped": "공동구"
+        },
+        "공동출입구": {
+            "description": "A shared entryway used by multiple units in a building",
+            "english": "Common entrance",
+            "mapped": "공동출입구"
+        },
+        "공용시설": {
+            "description": "Shared amenities or spaces within a building or housing complex",
+            "english": "Common Facilities",
+            "mapped": "공용시설"
+        },
+        "공용욕실": {
+            "description": "A shared restroom facility in a building accessible to all occupants or visitors",
+            "english": "Public Bathroom",
+            "mapped": "공용욕실"
+        },
+        "공용욕실2": {
+            "description": "A shared restroom facility in a building accessible to all occupants or visitors",
+            "english": "Public Bathroom",
+            "mapped": "공용욕실2"
+        },
+        "공용현관": {
+            "description": "The main entry point shared by all occupants of a building",
+            "english": "Common Entrance",
+            "mapped": "공용현관"
+        },
+        "공용화장실": {
+            "description": "A toilet facility that is available for use by the general public in a building.",
+            "english": "Public Restroom",
+            "mapped": "공용화장실"
+        },
+        "관리소": {
+            "description": "A room or space in a building designated for administrative tasks and property management",
+            "english": "Management Office",
+            "mapped": "관리소"
+        },
+        "관리시설": {
+            "description": "Spaces within a building dedicated to operations and maintenance activities",
+            "english": "Management Facilities",
+            "mapped": "관리시설"
+        },
+        "기계실": {
+            "description": "A room in a building dedicated to the mechanical equipment and its associated electrical equipment",
+            "english": "Mechanical Room",
+            "mapped": "기계실"
+        },
+        "녹지공간": {
+            "description": "An area within a development or building that is devoted to nature and outdoor enjoyment",
+            "english": "Green Space",
+            "mapped": "녹지공간"
+        },
+        "놀이시설": {
+            "description": "Outdoor area equipped for children's play in a residential or commercial building",
+            "english": "Playground facilities",
+            "mapped": "놀이시설"
+        },
+        "다용도실": {
+            "description": "A room designed to be used for various functions or activities",
+            "english": "Multipurpose Room",
+            "mapped": "다용도실"
+        },
+        "단지내도로": {
+            "description": "A road or pathway within a residential or commercial complex",
+            "english": "Complex Internal Road",
+            "mapped": "단지내도로"
+        },
+        "단지문주": {
+            "description": "The vertical support or frame surrounding the door in a building complex",
+            "english": "Doorpost of a complex",
+            "mapped": "단지문주"
+        },
+        "대피소": {
+            "description": "A place providing temporary protection from bad weather or danger, often used in the context of emergencies or disasters",
+            "english": "Shelter",
+            "mapped": "대피소"
+        },
+        "도서관": {
+            "description": "A room or building where collections of books, periodicals, and sometimes films and recorded music are kept for use or borrowing",
+            "english": "Library",
+            "mapped": "도서관"
+        },
+        "동현관": {
+            "description": "A room or space in a building dedicated to the display of bronze statues",
+            "english": "Bronze Statue Hall",
+            "mapped": "동현관"
+        },
+        "드레스룸": {
+            "description": "A room in a house where people store clothes and get dressed",
+            "english": "Dressing room",
+            "mapped": "드레스룸"
+        },
+        "발코니": {
+            "description": "An outdoor space projecting from a living room or bedroom. In Korea, it is often provided as a service area and can be enclosed to extend the interior space.",
+            "english": "Balcony",
+            "mapped": "발코니"
+        },
+        "발코니(거실)": {
+            "description": "An outdoor area that is connected to the living room of a building",
+            "english": "Living Room Balcony",
+            "mapped": "발코니(거실)"
+        },
+        "발코니(주방)": {
+            "description": "An outdoor space that is directly connected to the kitchen",
+            "english": "Kitchen Balcony",
+            "mapped": "발코니(주방)"
+        },
+        "방재실": {
+            "description": "A room designed for protection against disasters or emergencies such as storms, fires, or bombings",
+            "english": "Shelter Room",
+            "mapped": "방재실"
+        },
+        "밸브실": {
+            "description": "A room in a building where the control valves for plumbing or heating systems are located",
+            "english": "Valve Room",
+            "mapped": "밸브실"
+        },
+        "변전실": {
+            "description": "A room in a building where electrical transformers are housed for power distribution",
+            "english": "Transformer Room",
+            "mapped": "변전실"
+        },
+        "보일러실": {
+            "description": "A room where the building's heating system or boiler is located",
+            "english": "Boiler Room",
+            "mapped": "보일러실"
+        },
+        "보행공간/광장": {
+            "description": "An open public space or square designed for pedestrian use in a building or city",
+            "english": "Pedestrian Space/Plaza",
+            "mapped": "보행공간/광장"
+        },
+        "복도": {
+            "description": "A long passage in a building from which doors lead into rooms",
+            "english": "Corridor",
+            "mapped": "복도"
+        },
+        "부부욕실": {
+            "description": "A large, private bathroom connected to the master bedroom in a house",
+            "english": "Master Bathroom",
+            "mapped": "부부욕실"
+        },
+        "분리수거장": {
+            "description": "A designated area in a building for the collection and sorting of recyclable materials",
+            "english": "Recycling Center",
+            "mapped": "분리수거장"
+        },
+        "빨래방": {
+            "description": "A room in a building specifically designed and equipped for washing and drying clothes",
+            "english": "Laundry Room",
+            "mapped": "빨래방"
+        },
+        "상가": {
+            "description": "A space within a building that is designed for conducting business or commerce",
+            "english": "Commercial Space",
+            "mapped": "상가"
+        },
+        "세탁실": {
+            "description": "A room in a building specifically designed and equipped for washing and drying clothes",
+            "english": "Laundry Room",
+            "mapped": "세탁실"
+        },
+        "승강기": {
+            "description": "A vertical transportation device that moves people or goods between floors of a building.",
+            "english": "Elevator",
+            "mapped": "승강기"
+        },
+        "승강기기계실": {
+            "description": "A room where the machinery and control systems for an elevator are located",
+            "english": "Elevator Machine Room",
+            "mapped": "승강기기계실"
+        },
+        "승강장": {
+            "description": "A waiting area at the entrance of an elevator on each floor of a building",
+            "english": "Elevator lobby",
+            "mapped": "승강장"
+        },
+        "실외기실": {
+            "description": "A room or space designated for housing the outdoor unit of an air conditioning system",
+            "english": "Outdoor Unit Room",
+            "mapped": "실외기실"
+        },
+        "알파룸": {
+            "description": "A term used in Korea to describe a small room or space within a larger room, often used for storage or as a dressing room",
+            "english": "Alfa Room",
+            "mapped": "알파룸"
+        },
+        "어린이집": {
+            "description": "A room or a separate building designed for early childhood education",
+            "english": "Kindergarten",
+            "mapped": "어린이집"
+        },
+        "열교환기실": {
+            "description": "A room where the heat exchanger system, a device that transfers heat from one medium to another, is located.",
+            "english": "Heat Exchanger Room",
+            "mapped": "열교환기실"
+        },
+        "오수처리시설": {
+            "description": "A facility where sewage is treated and processed to be safe and environmentally friendly",
+            "english": "Sewage Treatment Facility",
+            "mapped": "오수처리시설"
+        },
+        "옥내": {
+            "description": "Refers to the interior part of a building or a house",
+            "english": "Indoor",
+            "mapped": "옥내"
+        },
+        "옥상": {
+            "description": "The outer surface of a building's top, often accessible and used for various purposes",
+            "english": "Rooftop",
+            "mapped": "옥상"
+        },
+        "옥외/외부": {
+            "description": "The outside part of a building or area",
+            "english": "Outdoor/Exterior",
+            "mapped": "옥외/외부"
+        },
+        "외벽": {
+            "description": "The outermost wall of a building that separates the interior from the exterior",
+            "english": "Exterior wall",
+            "mapped": "외벽"
+        },
+        "외부": {
+            "description": "The outside part of a building or structure",
+            "english": "Exterior",
+            "mapped": "외부"
+        },
+        "욕실": {
+            "description": "A room in a building equipped with facilities for washing and usually with one or more toilets",
+            "english": "Bathroom",
+            "mapped": "욕실"
+        },
+        "우수처리시설": {
+            "description": "A facility designed to control or manage excess rainwater or melted snow from impervious surfaces",
+            "english": "Stormwater Management Facility",
+            "mapped": "우수처리시설"
+        },
+        "운동시설": {
+            "description": "A designated area within a building equipped for physical activity and exercise",
+            "english": "Exercise Facility",
+            "mapped": "운동시설"
+        },
+        "유수검지장치실": {
+            "description": "A room designated for the inspection and management of rainwater drainage systems in a building",
+            "english": "Rainwater Inspection Room",
+            "mapped": "유수검지장치실"
+        },
+        "자전거보관소": {
+            "description": "A designated room in a building for storing bicycles securely",
+            "english": "Bicycle Storage Room",
+            "mapped": "자전거보관소"
+        },
+        "장애인경사로": {
+            "description": "A sloped pathway installed in a building or environment to improve accessibility for individuals with physical disabilities",
+            "english": "Handicap Ramp",
+            "mapped": "장애인경사로"
+        },
+        "전기실": {
+            "description": "A room in a building where electrical equipment, such as circuit breakers and transformers, are housed.",
+            "english": "Electrical Room",
+            "mapped": "전기실"
+        },
+        "전실": {
+            "description": "A room in a residential house or apartment for general and informal everyday activities.",
+            "english": "Living Room",
+            "mapped": "전실"
+        },
+        "전체": {
+            "description": "Refers to the entirety of a building or structure",
+            "english": "Whole",
+            "mapped": "전체"
+        },
+        "주민공동시설": {
+            "description": "Shared facilities within a residential complex for use by residents",
+            "english": "Residential Community Facilities",
+            "mapped": "주민공동시설"
+        },
+        "주방": {
+            "description": "A room or area where food is prepared and cooked",
+            "english": "Kitchen",
+            "mapped": "주방"
+        },
+        "주차시설": {
+            "description": "A designated area or structure where vehicles can be parked",
+            "english": "Parking Facility",
+            "mapped": "주차시설"
+        },
+        "지붕": {
+            "description": "The top covering of a building, protecting it from the weather",
+            "english": "Roof",
+            "mapped": "지붕"
+        },
+        "지상주차장": {
+            "description": "A parking area that is not underground, often found in residential or commercial buildings",
+            "english": "Above-ground parking lot",
+            "mapped": "지상주차장"
+        },
+        "지하": {
+            "description": "An area of a building that is partially or entirely below ground level",
+            "english": "Basement",
+            "mapped": "지하"
+        },
+        "지하저수조": {
+            "description": "A storage system located beneath the ground level for holding water, often used in buildings for water supply or fire safety purposes",
+            "english": "Underground water tank",
+            "mapped": "지하저수조"
+        },
+        "지하주차장": {
+            "description": "A parking facility located beneath a building or structure",
+            "english": "Underground Parking Lot",
+            "mapped": "지하주차장"
+        },
+        "출입구": {
+            "description": "The place or point where one can enter a building or room",
+            "english": "Entrance",
+            "mapped": "출입구"
+        },
+        "침실1(안방)": {
+            "description": "The main or largest bedroom in a home, typically for the homeowners",
+            "english": "Bedroom (Master Bedroom)",
+            "mapped": "침실(안방)"
+        },
+        "침실1(안방)2": {
+            "description": "The main or largest bedroom in a home, typically for the homeowners",
+            "english": "Bedroom (Master Bedroom)",
+            "mapped": "침실(안방)"
+        },
+        "침실2": {
+            "description": "The second bedroom in a house or apartment",
+            "english": "Bedroom ",
+            "mapped": "침실2"
+        },
+        "침실3": {
+            "description": "A housing unit with three separate rooms intended for sleeping",
+            "english": "Bedrooms",
+            "mapped": "침실3"
+        },
+        "침실4": {
+            "description": "A housing unit with four separate rooms intended for sleeping",
+            "english": "Bedrooms",
+            "mapped": "침실4"
+        },
+        "통신실": {
+            "description": "A room in a building designated for housing communication equipment such as servers, routers, and switches",
+            "english": "Communication Room",
+            "mapped": "통신실"
+        },
+        "퇴거(부분)": {
+            "description": "The process of moving people out of a certain part of a building due to safety or construction reasons",
+            "english": "Partial evacuation",
+            "mapped": "퇴거(부분)"
+        },
+        "퇴거(전체)": {
+            "description": "The process of expelling a tenant from a property, in this case, from the entire building",
+            "english": "Eviction (total)",
+            "mapped": "퇴거(전체)"
+        },
+        "팬트리": {
+            "description": "A small room or closet in which food, dishes, and utensils are kept.",
+            "english": "Pantry",
+            "mapped": "팬트리"
+        },
+        "펌프실": {
+            "description": "A room in a building where the water pump and related equipment are located",
+            "english": "Pump Room",
+            "mapped": "펌프실"
+        },
+        "피로티": {
+            "description": "An architectural design where the building is raised up on supports, creating an open space or 'pilotis' underneath",
+            "english": "Piloti",
+            "mapped": "피로티"
+        },
+        "현관": {
+            "description": "The main entryway of a building. In an apartment, it is the initial space you enter after opening the unit's front door.",
+            "english": "Entrance / Foyer",
+            "mapped": "현관"
+        },
+        "현관창고": {
+            "description": "A storage space located near the entrance of a building or house",
+            "english": "Entrance storage",
+            "mapped": "현관창고"
+        },
+        "환경(조형)시설": {
+            "description": "A facility or structure within a building or space that is designed to enhance the aesthetic or environmental quality.",
+            "english": "Environmental (Sculptural) Facility",
+            "mapped": "환경(조형)시설"
+        },
+        "휀룸": {
+            "description": "A room designed to control and maintain specific levels of humidity, often used for storage or testing purposes in a building",
+            "english": "Humidity Room",
+            "mapped": "휀룸"
+        },
+        "휴게시설": {
+            "description": "A designated area or room within a building intended for relaxation or leisure activities",
+            "english": "Rest facility",
+            "mapped": "휴게시설"
+        }
+    },
+    "공종": {
+        "건축": {
+            "description": "The art or practice of designing and constructing buildings",
+            "english": "Architecture",
+            "mapped": "건축"
+        },
+        "기계": {
+            "description": "Refers to machines, especially large ones, used in construction and building processes.",
+            "english": "Machinery",
+            "mapped": "기계"
+        },
+        "전기": {
+            "description": "A form of energy resulting from the existence of charged particles, used in construction for wiring and powering equipment.",
+            "english": "Electricity",
+            "mapped": "전기"
+        },
+        "조경": {
+            "description": "The process of making a yard or other piece of land more attractive by altering the existing design, adding ornamental features, and planting trees and shrubs.",
+            "english": "Landscaping",
+            "mapped": "조경"
+        },
+        "토목": {
+            "description": "A professional engineering discipline that deals with the design, construction, and maintenance of the physical and naturally built environment.",
+            "english": "Civil Engineering",
+            "mapped": "토목"
+        },
+        "통신": {
+            "description": "Refers to the system or process for transmitting or exchanging information, often related to telecommunication systems in a building or house",
+            "english": "Communication",
+            "mapped": "통신"
+        }
+    },
+    "보수공사명": {
+        "UBR공사": {
+            "description": "A type of construction involving the use of UBR (Under Beam Reinforcement), a method of reinforcing beams in a building structure",
+            "english": "UBR Construction",
+            "mapped": "UBR공사"
+        },
+        "개별보일러공사": {
+            "description": "The process of installing a heating system that operates independently for each unit in a building",
+            "english": "Individual Boiler Installation",
+            "mapped": "개별보일러공사"
+        },
+        "경미보수": {
+            "description": "Refers to small-scale repair work in construction or housing, typically to fix minor defects or damages",
+            "english": "Minor Repair",
+            "mapped": "경미보수"
+        },
+        "계량기공사": {
+            "description": "The process of installing or constructing devices that measure utilities like gas, water, or electricity in a building or house",
+            "english": "Metering device construction",
+            "mapped": "계량기공사"
+        },
+        "교체공사": {
+            "description": "The process of removing and installing new materials or components in a construction or housing project",
+            "english": "Replacement Work",
+            "mapped": "교체공사"
+        },
+        "급수/급탕배관공사": {
+            "description": "The process of installing or repairing the pipes that carry water and hot water in a building",
+            "english": "Water Supply/Hot Water Piping Work",
+            "mapped": "급수/급탕배관공사"
+        },
+        "기계기타공사": {
+            "description": "Refers to various mechanical tasks not classified under specific categories in a construction project",
+            "english": "Mechanical Miscellaneous Works",
+            "mapped": "기계기타공사"
+        },
+        "기타": {
+            "description": "Refers to other various elements or categories not specifically mentioned in the construction or housing context",
+            "english": "Miscellaneous",
+            "mapped": "기타"
+        },
+        "난방배관공사": {
+            "description": "The process of installing pipes for a building's heating system",
+            "english": "Heating Pipe Installation",
+            "mapped": "난방배관공사"
+        },
+        "누수공사": {
+            "description": "The process of fixing water or gas leaks in a building or structure",
+            "english": "Leakage repair work",
+            "mapped": "누수공사"
+        },
+        "도배공사": {
+            "description": "The process of applying wallpaper to the walls of a building or house",
+            "english": "Wallpapering work",
+            "mapped": "도배공사"
+        },
+        "도시가스배관공사": {
+            "description": "The process of installing gas pipelines in urban areas for residential and commercial use",
+            "english": "Urban Gas Pipeline Construction",
+            "mapped": "도시가스배관공사"
+        },
+        "도장공사": {
+            "description": "The process of applying paint or similar substances to construction surfaces",
+            "english": "Painting Work",
+            "mapped": "도장공사"
+        },
+        "동력설비공사": {
+            "description": "The process of building or installing power-related facilities in a construction project",
+            "english": "Power Facility Construction",
+            "mapped": "동력설비공사"
+        },
+        "마감공사": {
+            "description": "The final steps in construction including painting, tiling, carpeting, and installation of appliances and fixtures",
+            "english": "Finishing work",
+            "mapped": "마감공사"
+        },
+        "목공사": {
+            "description": "The trade of cutting, shaping, and installing building materials during construction",
+            "english": "Carpentry",
+            "mapped": "목공사"
+        },
+        "바닥공사": {
+            "description": "The process of installing or repairing a floor in a building or house",
+            "english": "Flooring Work",
+            "mapped": "바닥공사"
+        },
+        "방수공사": {
+            "description": "The process of making a structure water-resistant so that it remains unaffected by water",
+            "english": "Waterproofing work",
+            "mapped": "방수공사"
+        },
+        "배관/배선공사": {
+            "description": "The process of installing and maintaining systems used for water, sewage, and electrical in a building",
+            "english": "Plumbing/Electrical work",
+            "mapped": "배관/배선공사"
+        },
+        "보수공사": {
+            "description": "Construction activities aimed at fixing or restoring damaged or worn-out parts of a building",
+            "english": "Repair work",
+            "mapped": "보수공사"
+        },
+        "부품교체": {
+            "description": "The process of changing a faulty or old component with a new one in a construction or housing context.",
+            "english": "Part Replacement",
+            "mapped": "부품교체"
+        },
+        "소방설비공사": {
+            "description": "The process of installing and setting up fire safety equipment and systems in a building.",
+            "english": "Fire Protection Facilities Construction",
+            "mapped": "소방설비공사"
+        },
+        "소화배관공사": {
+            "description": "The process of installing or repairing the pipes used in a building's fire suppression system.",
+            "english": "Firefighting Piping Work",
+            "mapped": "소화배관공사"
+        },
+        "수장공사": {
+            "description": "The process of installing and repairing piping, fixtures, appliances, and appurtenances in connection with the water supply, drainage systems, etc., in a building.",
+            "english": "Plumbing work",
+            "mapped": "수장공사"
+        },
+        "에어컨기타공사": {
+            "description": "Refers to various construction tasks related to the installation, repair, or maintenance of air conditioning systems",
+            "english": "Air Conditioning Miscellaneous Construction",
+            "mapped": "에어컨기타공사"
+        },
+        "오/배수배관공사": {
+            "description": "The process of installing or repairing waste or drainage pipes in a building",
+            "english": "Waste/Drainage Pipe Work",
+            "mapped": "오/배수배관공사"
+        },
+        "우수배관공사": {
+            "description": "The process of installing or repairing the system that carries waste water or sewage away from buildings.",
+            "english": "Drainage Pipe Work",
+            "mapped": "우수배관공사"
+        },
+        "위생도기류공사": {
+            "description": "The process of installing bathroom fixtures such as toilets, sinks, and bathtubs",
+            "english": "Sanitary ware installation",
+            "mapped": "위생도기류공사"
+        },
+        "유리공사": {
+            "description": "The process of installing, repairing, or replacing glass in a building",
+            "english": "Glasswork",
+            "mapped": "유리공사"
+        },
+        "자동제어공사": {
+            "description": "It refers to the construction process related to the installation and maintenance of automated control systems in buildings.",
+            "english": "Automatic Control Work",
+            "mapped": "자동제어공사"
+        },
+        "잡공사": {
+            "description": "Various minor construction tasks not classified under major construction categories",
+            "english": "Miscellaneous construction",
+            "mapped": "잡공사"
+        },
+        "잡철공사": {
+            "description": "Various small-scale iron works involved in construction, such as installing iron structures or fixtures.",
+            "english": "Miscellaneous Iron Works",
+            "mapped": "잡철공사"
+        },
+        "장판공사": {
+            "description": "The process of installing vinyl as a flooring material in a building or house",
+            "english": "Vinyl Flooring Work",
+            "mapped": "장판공사"
+        },
+        "전면교체": {
+            "description": "A construction term referring to the complete replacement of the front part of a building or structure.",
+            "english": "Full Frontal Replacement",
+            "mapped": "전면교체"
+        },
+        "정보제어, 보안설비공사": {
+            "description": "The process of managing data and constructing security systems in a building or housing project",
+            "english": "Information Control, Security Facilities Construction",
+            "mapped": "정보제어, 보안설비공사"
+        },
+        "정보통신설비공사": {
+            "description": "The process of installing and setting up systems for information and communication in a building or structure.",
+            "english": "Information and Communication Facilities Construction",
+            "mapped": "정보통신설비공사"
+        },
+        "조경시설물공사": {
+            "description": "The process of building or installing structures related to landscaping such as parks, gardens, or other outdoor spaces",
+            "english": "Landscape Facilities Construction",
+            "mapped": "조경시설물공사"
+        },
+        "조명설비공사": {
+            "description": "The process of installing lighting systems in a building or construction site",
+            "english": "Lighting Installation Work",
+            "mapped": "조명설비공사"
+        },
+        "중앙보일러공사": {
+            "description": "The process of installing or repairing a central heating system that uses a boiler",
+            "english": "Central Boiler Construction",
+            "mapped": "중앙보일러공사"
+        },
+        "창호공사": {
+            "description": "The process of fitting and securing windows in a building construction",
+            "english": "Window Installation Work",
+            "mapped": "창호공사"
+        },
+        "철근콘크리트": {
+            "description": "A type of concrete where steel bars, plates or fibers have been incorporated to strengthen a material that would otherwise be brittle",
+            "english": "Reinforced Concrete",
+            "mapped": "철근콘크리트"
+        },
+        "타일공사": {
+            "description": "The process of installing tiles on surfaces such as floors, walls, or roofs in a building",
+            "english": "Tile Work",
+            "mapped": "타일공사"
+        },
+        "펌프류공사": {
+            "description": "The process of installing and setting up pump systems in a building or construction site",
+            "english": "Pump Installation Work",
+            "mapped": "펌프류공사"
+        },
+        "환기공사": {
+            "description": "The process of installing or repairing systems that provide fresh air flow in a building or house",
+            "english": "Ventilation work",
+            "mapped": "환기공사"
+        },
+        "환기배관공사": {
+            "description": "The process of installing pipes for air circulation in a building",
+            "english": "Ventilation Pipe Work",
+            "mapped": "환기배관공사"
+        }
+    },
+    "부위자재": {
+        "AL창호": {
+            "description": "Window with aluminum framing and glazing.",
+            "english": "Aluminum window / Aluminum frame window",
+            "mapped": "AL창호"
+        },
+        "CCTV": {
+            "description": "Video surveillance cameras used for security monitoring.",
+            "english": "CCTV",
+            "mapped": "CCTV"
+        },
+        "CRT": {
+            "description": "Legacy display technology device (old monitors/TVs).",
+            "english": "CRT (Cathode Ray Tube)",
+            "mapped": "CRT"
+        },
+        "DVR": {
+            "description": "Device that records video to storage.",
+            "english": "DVR (Digital Video Recorder)",
+            "mapped": "DVR"
+        },
+        "DVR/NVR": {
+            "description": "Recorders for analog (DVR) or network (NVR) video systems.",
+            "english": "DVR / NVR",
+            "mapped": "DVR/NVR"
+        },
+        "PL창호": {
+            "description": "Window with PVC or plastic framing.",
+            "english": "Plastic (PVC) window / PVC-framed window",
+            "mapped": "PL창호"
+        },
+        "TV": {
+            "description": "Electronic device for viewing broadcast or video content.",
+            "english": "Television / TV set",
+            "mapped": "TV"
+        },
+        "TV공청설비": {
+            "description": "Shared television reception system for a building.",
+            "english": "Communal TV reception system",
+            "mapped": "TV공청설비"
+        },
+        "TV안테나": {
+            "description": "Antenna for receiving terrestrial TV signals.",
+            "english": "TV antenna / Television antenna",
+            "mapped": "TV안테나"
+        },
+        "UPS": {
+            "description": "Backup unit supplying short-term power during outages.",
+            "english": "UPS (Uninterruptible Power Supply)",
+            "mapped": "UPS"
+        },
+        "가로등": {
+            "description": "Outdoor lighting for roads and pathways.",
+            "english": "Streetlight / Street lamp",
+            "mapped": "가로등"
+        },
+        "가스검침": {
+            "description": "Process of reading or inspecting gas meters.",
+            "english": "Gas meter reading / Gas meter inspection",
+            "mapped": "가스검침"
+        },
+        "가스경보기": {
+            "description": "Device detecting combustible or toxic gas concentrations.",
+            "english": "Gas detector / Gas alarm",
+            "mapped": "가스경보기"
+        },
+        "가스설비": {
+            "description": "Piping and appliances for gas distribution and use.",
+            "english": "Gas equipment / Gas installation",
+            "mapped": "가스설비"
+        },
+        "가스원격검침": {
+            "description": "System for remotely reading gas meter data.",
+            "english": "Remote gas metering / Remote gas reading",
+            "mapped": "가스원격검침"
+        },
+        "가스쿡탑": {
+            "description": "Kitchen cooking appliance using gas burners.",
+            "english": "Gas cooktop / Gas stove top",
+            "mapped": "가스쿡탑"
+        },
+        "간이그늘막": {
+            "description": "Temporary shade or shelter structure.",
+            "english": "Temporary canopy / Shade structure",
+            "mapped": "간이그늘막"
+        },
+        "간판": {
+            "description": "Exterior sign used for identification or information.",
+            "english": "Signboard / Signage",
+            "mapped": "간판"
+        },
+        "감시반": {
+            "description": "Central panel for CCTV or monitoring systems.",
+            "english": "Monitoring panel / Surveillance control panel",
+            "mapped": "감시반"
+        },
+        "감지기": {
+            "description": "Device that detects smoke, motion, gas, or other conditions.",
+            "english": "Detector / Sensor",
+            "mapped": "감지기"
+        },
+        "강제창호": {
+            "description": "Window constructed with steel framing.",
+            "english": "Steel window / Steel-framed window",
+            "mapped": "강제창호"
+        },
+        "거름망": {
+            "description": "Mesh or screen that filters debris from drains.",
+            "english": "Strainer / Filter screen",
+            "mapped": "거름망"
+        },
+        "거울": {
+            "description": "Reflective glass mounted on walls or doors.",
+            "english": "Mirror",
+            "mapped": "거울"
+        },
+        "걸레받이": {
+            "description": "Trim at the base of walls protecting and finishing the joint.",
+            "english": "Baseboard / Skirting board",
+            "mapped": "걸레받이"
+        },
+        "걸쇠": {
+            "description": "Mechanical fastener that secures doors or gates.",
+            "english": "Latch / Bolt",
+            "mapped": "걸쇠"
+        },
+        "경비실기": {
+            "description": "Devices and systems used in the security control room.",
+            "english": "Security office equipment / Guardhouse equipment",
+            "mapped": "경비실기"
+        },
+        "계량기": {
+            "description": "Device that measures consumption of utilities (water, gas, electricity).",
+            "english": "Meter (utility meter)",
+            "mapped": "계량기"
+        },
+        "계량기함": {
+            "description": "Protective box housing utility meters.",
+            "english": "Meter box / Meter enclosure",
+            "mapped": "계량기함"
+        },
+        "계전기": {
+            "description": "Protective device that detects faults and triggers breakers.",
+            "english": "Relay (protective relay)",
+            "mapped": "계전기"
+        },
+        "고가수조": {
+            "description": "Raised tank supplying water by gravity.",
+            "english": "Elevated water tank / Overhead tank",
+            "mapped": "고가수조"
+        },
+        "공기주입기": {
+            "description": "Device that supplies or forces air into systems.",
+            "english": "Air blower / Inflator",
+            "mapped": "공기주입기"
+        },
+        "관리소기": {
+            "description": "Equipment used by building management staff.",
+            "english": "Management office equipment / Facility management equipment",
+            "mapped": "관리소기"
+        },
+        "구동기": {
+            "mapped": "구동기",
+            "description": "Mechanical device that controls or moves parts automatically, such as dampers or valves.",
+            "english": "Actuator"
+        },
+        "급수/급탕배관": {
+            "description": "Pipes carrying potable cold and hot water.",
+            "english": "Cold & hot water supply piping",
+            "mapped": "급수/급탕배관"
+        },
+        "급수/급탕펌프": {
+            "description": "Pump supplying cold or hot water under pressure.",
+            "english": "Water supply / Hot water pump",
+            "mapped": "급수/급탕펌프"
+        },
+        "급수전": {
+            "description": "Outdoor outlet for water supply, often for maintenance/fire.",
+            "english": "Hydrant / Water hydrant",
+            "mapped": "급수전"
+        },
+        "급수펌프": {
+            "description": "Pump delivering potable water to systems.",
+            "english": "Water supply pump",
+            "mapped": "급수펌프"
+        },
+        "급탕펌프": {
+            "description": "Pump circulating domestic hot water supply.",
+            "english": "Hot water (domestic) pump",
+            "mapped": "급탕펌프"
+        },
+        "기계기타": {
+            "description": "Miscellaneous mechanical components not elsewhere listed.",
+            "english": "Other mechanical equipment / Misc mechanical parts",
+            "mapped": "기계기타"
+        },
+        "기타부품": {
+            "description": "Miscellaneous spare parts or components.",
+            "english": "Other parts / Miscellaneous parts",
+            "mapped": "기타부품"
+        },
+        "난간": {
+            "description": "Barrier to prevent falls at edges or stairs.",
+            "english": "Railing / Handrail / Guardrail",
+            "mapped": "난간"
+        },
+        "난방배관": {
+            "description": "Pipes circulating heated water for space heating.",
+            "english": "Heating piping / Heating circulation pipes",
+            "mapped": "난방배관"
+        },
+        "난방설비": {
+            "description": "Systems providing heat to building spaces.",
+            "english": "Heating system / Heating equipment",
+            "mapped": "난방설비"
+        },
+        "난방순환펌프": {
+            "description": "Pump that circulates heated water in heating loops.",
+            "english": "Heating circulation pump",
+            "mapped": "난방순환펌프"
+        },
+        "녹지면(잔디면)": {
+            "description": "Turf or planted grassy area in landscape.",
+            "english": "Green area (lawn surface)",
+            "mapped": "녹지면(잔디면)"
+        },
+        "논슬립(계단)": {
+            "description": "Non-slip elements added to stairs for safety.",
+            "english": "Non-slip stair nosing / Anti-slip (stair treads)",
+            "mapped": "논슬립(계단)"
+        },
+        "놀이기구": {
+            "description": "Installed play structures for children.",
+            "english": "Playground equipment / Playground apparatus",
+            "mapped": "놀이기구"
+        },
+        "놀이벽/가벽": {
+            "description": "Vertical element used for play or separation.",
+            "english": "Play wall / Partition wall",
+            "mapped": "놀이벽/가벽"
+        },
+        "담장": {
+            "description": "Low wall or boundary partition.",
+            "english": "Wall / Fence wall",
+            "mapped": "담장"
+        },
+        "대리석": {
+            "description": "Natural stone used for finishes and countertops.",
+            "english": "Marble (stone)",
+            "mapped": "대리석"
+        },
+        "도배장판": {
+            "mapped": "도배장판",
+            "description": "Interior finishing materials for walls and floors, including wallpaper and vinyl flooring.",
+            "english": "Wallpaper and Floor Covering"
+        },
+        "도배지": {
+            "description": "Decorative material applied to interior walls.",
+            "english": "Wallpaper / Wall covering",
+            "mapped": "도배지"
+        },
+        "도어락": {
+            "description": "Electronic locking device for access control.",
+            "english": "Door lock (keyless/electronic door lock)",
+            "mapped": "도어락"
+        },
+        "도어록": {
+            "description": "Locking mechanism for doors; may be mechanical or electronic.",
+            "english": "Door lock (electronic door lock)",
+            "mapped": "도어록"
+        },
+        "도어스토퍼": {
+            "description": "Device that prevents a door from swinging too far.",
+            "english": "Door stopper / Door stop",
+            "mapped": "도어스토퍼"
+        },
+        "도어클로저": {
+            "description": "Device that closes a door automatically after opening.",
+            "english": "Door closer (hydraulic door closer)",
+            "mapped": "도어클로저"
+        },
+        "동체감지기": {
+            "description": "Sensor detecting movement or presence of people.",
+            "english": "Intrusion/body detector / Motion detector",
+            "mapped": "동체감지기"
+        },
+        "라디에이터": {
+            "description": "Heat-emitting panel used for space heating.",
+            "english": "Radiator",
+            "mapped": "라디에이터"
+        },
+        "렌지후드": {
+            "description": "Exhaust system over a cooktop removing smoke and grease.",
+            "english": "Range hood / Kitchen hood",
+            "mapped": "렌지후드"
+        },
+        "마감재": {
+            "description": "Surface materials used to complete interiors or exteriors.",
+            "english": "Finish material / Finishing material",
+            "mapped": "마감재"
+        },
+        "마루": {
+            "description": "Finished wood floor surface.",
+            "english": "Wood flooring / Hardwood floor",
+            "mapped": "마루"
+        },
+        "말뚝": {
+            "description": "Structural member driven into ground for support.",
+            "english": "Pile / Stake",
+            "mapped": "말뚝"
+        },
+        "매트": {
+            "description": "Protective floor covering or welcome mat.",
+            "english": "Mat / Floor mat",
+            "mapped": "매트"
+        },
+        "맨홀": {
+            "description": "Access opening to underground utilities.",
+            "english": "Manhole / Manhole cover",
+            "mapped": "맨홀"
+        },
+        "모래/칩": {
+            "description": "Surfacing materials used in playgrounds.",
+            "english": "Sand / Wood chips",
+            "mapped": "모래/칩"
+        },
+        "목재": {
+            "description": "Wood used for construction and finishes.",
+            "english": "Timber / Wood material",
+            "mapped": "목재"
+        },
+        "목재데크": {
+            "description": "Outdoor floor structure made of wood.",
+            "english": "Wooden deck / Timber decking",
+            "mapped": "목재데크"
+        },
+        "목제창호": {
+            "description": "Window with timber framing and glazing.",
+            "english": "Wooden window / Wood-framed window",
+            "mapped": "목제창호"
+        },
+        "몰딩": {
+            "description": "Decorative trim used at junctions or edges.",
+            "english": "Molding / Trim",
+            "mapped": "몰딩"
+        },
+        "무인택배함": {
+            "description": "Secure locker for parcel delivery and pickup.",
+            "english": "Unmanned parcel locker / Package delivery locker",
+            "mapped": "무인택배함"
+        },
+        "문": {
+            "description": "Movable barrier providing access through an opening.",
+            "english": "Door",
+            "mapped": "문"
+        },
+        "물놀이시설": {
+            "description": "Shallow water features for recreational play.",
+            "english": "Water play facility / Splash pool facility",
+            "mapped": "물놀이시설"
+        },
+        "물탱크": {
+            "description": "Storage tank for potable or non-potable water.",
+            "english": "Water tank / Reservoir tank",
+            "mapped": "물탱크"
+        },
+        "미끄럼방지": {
+            "description": "Surface treatment to reduce slipping hazard.",
+            "english": "Anti-slip treatment / Non-slip treatment",
+            "mapped": "미끄럼방지"
+        },
+        "바닥": {
+            "description": "Finished surface people walk on inside a building.",
+            "english": "Floor / Flooring",
+            "mapped": "바닥"
+        },
+        "바닥재": {
+            "description": "Material used to finish floors (tiles, wood, vinyl).",
+            "english": "Flooring material / Floor covering",
+            "mapped": "바닥재"
+        },
+        "바닥포장": {
+            "description": "Surface finish or paving on outdoor/indoor floors.",
+            "english": "Pavement / Floor paving",
+            "mapped": "바닥포장"
+        },
+        "발신기": {
+            "description": "Device that sends alarm signals to receivers.",
+            "english": "Transmitter (alarm transmitter)",
+            "mapped": "발신기"
+        },
+        "발열선": {
+            "description": "Cable that provides heat to prevent freezing.",
+            "english": "Heating cable / Heat trace cable",
+            "mapped": "발열선"
+        },
+        "발전기": {
+            "description": "Machine that produces electrical power.",
+            "english": "Generator",
+            "mapped": "발전기"
+        },
+        "방송설비": {
+            "description": "Audio system used to make announcements.",
+            "english": "Public address (PA) system / Broadcasting equipment",
+            "mapped": "방송설비"
+        },
+        "방송앰프": {
+            "description": "Amplifier used in public address systems.",
+            "english": "Broadcast amplifier / PA amplifier",
+            "mapped": "방송앰프"
+        },
+        "방열판": {
+            "description": "Panel or device that radiates or dissipates heat.",
+            "english": "Heating panel / Heat sink",
+            "mapped": "방열판"
+        },
+        "방지턱": {
+            "description": "Raised element to control vehicle speed or parking.",
+            "english": "Speed bump / Curb / Wheel stop",
+            "mapped": "방지턱"
+        },
+        "방충망": {
+            "mapped": "방충망",
+            "description": "Mesh screen installed on windows or doors to block insects while allowing airflow.",
+            "english": "Insect Screen"
+        },
+        "방화문": {
+            "description": "Fire-resistant door designed to slow fire spread.",
+            "english": "Fire door",
+            "mapped": "방화문"
+        },
+        "배관": {
+            "description": "Tubes that convey liquids or gases.",
+            "english": "Pipe / Piping",
+            "mapped": "배관"
+        },
+        "배기팬": {
+            "description": "Fan that expels air to the outside for ventilation.",
+            "english": "Exhaust fan",
+            "mapped": "배기팬"
+        },
+        "배선": {
+            "description": "Cables and conductors that distribute electrical power.",
+            "english": "Wiring / Electrical wiring",
+            "mapped": "배선"
+        },
+        "배수구": {
+            "description": "Outlet for water to leave flooring surfaces.",
+            "english": "Drain / Floor drain",
+            "mapped": "배수구"
+        },
+        "배수시설": {
+            "description": "System for removing surface or wastewater.",
+            "english": "Drainage facility / Drainage system",
+            "mapped": "배수시설"
+        },
+        "배수펌프": {
+            "description": "Pump that moves wastewater away from a building.",
+            "english": "Drainage pump / Sewage pump",
+            "mapped": "배수펌프"
+        },
+        "배터리": {
+            "description": "Electrochemical energy storage unit.",
+            "english": "Battery",
+            "mapped": "배터리"
+        },
+        "밸브": {
+            "description": "Device controlling flow of fluids in pipes.",
+            "english": "Valve",
+            "mapped": "밸브"
+        },
+        "법면/돌쌓기": {
+            "description": "Measures to stabilize slopes, often with stonework.",
+            "english": "Slope protection / Stone revetment",
+            "mapped": "법면/돌쌓기"
+        },
+        "벤치": {
+            "description": "Seating installed in public/outdoor areas.",
+            "english": "Bench (outdoor)",
+            "mapped": "벤치"
+        },
+        "벽": {
+            "description": "Vertical structural or partition element.",
+            "english": "Wall",
+            "mapped": "벽"
+        },
+        "벽면": {
+            "description": "Vertical surface enclosing or dividing spaces.",
+            "english": "Wall surface / Wall",
+            "mapped": "벽면"
+        },
+        "벽지": {
+            "mapped": "벽지",
+            "description": "Decorative wall covering material used for interior design and protection.",
+            "english": "Wallpaper"
+        },
+        "변압기": {
+            "description": "Electrical device that changes voltage levels.",
+            "english": "Transformer",
+            "mapped": "변압기"
+        },
+        "보관소": {
+            "description": "Enclosed area for storing items.",
+            "english": "Storage room / Storage facility",
+            "mapped": "보관소"
+        },
+        "보도블록": {
+            "description": "Interlocking blocks used for outdoor paving.",
+            "english": "Paving block / Concrete paver",
+            "mapped": "보도블록"
+        },
+        "보일러": {
+            "description": "Equipment that heats water for heating or hot water supply.",
+            "english": "Boiler",
+            "mapped": "보일러"
+        },
+        "분전반": {
+            "description": "Panel that distributes electrical power to circuits.",
+            "english": "Distribution panel / Electrical distribution board",
+            "mapped": "분전반"
+        },
+        "붙박이장": {
+            "description": "Fixed-in cabinetry for storage.",
+            "english": "Built-in closet / Built-in wardrobe",
+            "mapped": "붙박이장"
+        },
+        "비디오폰": {
+            "description": "Intercom with integrated video communication.",
+            "english": "Video phone / Video intercom",
+            "mapped": "비디오폰"
+        },
+        "비상콜": {
+            "description": "Device to request immediate assistance.",
+            "english": "Emergency call station / Emergency call button",
+            "mapped": "비상콜"
+        },
+        "상판": {
+            "description": "Horizontal work surface, often in kitchens.",
+            "english": "Countertop / Worktop",
+            "mapped": "상판"
+        },
+        "샤워부스": {
+            "description": "Enclosed showering area in bathrooms.",
+            "english": "Shower booth / Shower cubicle",
+            "mapped": "샤워부스"
+        },
+        "석축": {
+            "description": "Stone-built slope stabilization structure.",
+            "english": "Stone retaining wall / Stone embankment",
+            "mapped": "석축"
+        },
+        "선반": {
+            "description": "Horizontal storage surface attached to walls.",
+            "english": "Shelf / Shelving",
+            "mapped": "선반"
+        },
+        "세면대": {
+            "description": "Basin used for washing hands and face.",
+            "english": "Washbasin / Bathroom sink",
+            "mapped": "세면대"
+        },
+        "세탁기": {
+            "description": "Appliance for laundering clothes.",
+            "english": "Washing machine",
+            "mapped": "세탁기"
+        },
+        "센서": {
+            "description": "Device that senses physical or environmental changes.",
+            "english": "Sensor",
+            "mapped": "센서"
+        },
+        "소모품": {
+            "description": "Items that are regularly used and replaced.",
+            "english": "Consumables / Spare consumable parts",
+            "mapped": "소모품"
+        },
+        "소방설비": {
+            "description": "Systems and devices for fire detection and suppression.",
+            "english": "Fire-fighting equipment / Fire protection system",
+            "mapped": "소방설비"
+        },
+        "소방펌프": {
+            "description": "Pump providing high-pressure water for firefighting.",
+            "english": "Fire pump",
+            "mapped": "소방펌프"
+        },
+        "소화기": {
+            "description": "Portable device for extinguishing small fires.",
+            "english": "Fire extinguisher",
+            "mapped": "소화기"
+        },
+        "소화배관": {
+            "description": "Piping that supplies water to fire suppression systems.",
+            "english": "Fire suppression piping / Fire-fighting piping",
+            "mapped": "소화배관"
+        },
+        "소화용품": {
+            "description": "Tools and consumables for firefighting operations.",
+            "english": "Fire-fighting supplies / Fire-fighting accessories",
+            "mapped": "소화용품"
+        },
+        "소화전": {
+            "description": "Connection point for firefighting water supply.",
+            "english": "Fire hydrant / Hose reel",
+            "mapped": "소화전"
+        },
+        "소화펌프": {
+            "description": "Pump dedicated to fire suppression water supply.",
+            "english": "Fire-fighting pump",
+            "mapped": "소화펌프"
+        },
+        "손잡이": {
+            "description": "Grasping device used to open or close doors/drawers.",
+            "english": "Handle / Door handle / Knob",
+            "mapped": "손잡이"
+        },
+        "수격방지기": {
+            "description": "Device that reduces pressure surges in piping.",
+            "english": "Water hammer arrester / Surge arrester (plumbing)",
+            "mapped": "수격방지기"
+        },
+        "수경시설": {
+            "description": "Planted water features and ponds.",
+            "english": "Water garden / Aquatic planting facility",
+            "mapped": "수경시설"
+        },
+        "수납장": {
+            "description": "Enclosed furniture for storing items.",
+            "english": "Cabinet / Storage cabinet",
+            "mapped": "수납장"
+        },
+        "수도": {
+            "description": "System providing potable water distribution.",
+            "english": "Water supply / Tap water system",
+            "mapped": "수도"
+        },
+        "수목": {
+            "description": "Trees and woody vegetation in landscaping.",
+            "english": "Trees / Woody plants",
+            "mapped": "수목"
+        },
+        "수배전반": {
+            "description": "Panel distributing low-voltage electrical power.",
+            "english": "Low-voltage distribution board / Switchboard",
+            "mapped": "수배전반"
+        },
+        "수신기": {
+            "description": "Device that receives signals from transmitters.",
+            "english": "Receiver (signal receiver)",
+            "mapped": "수신기"
+        },
+        "수전": {
+            "description": "Fixture controlling water flow at sinks or tubs.",
+            "english": "Faucet / Tap",
+            "mapped": "수전"
+        },
+        "수전류": {
+            "description": "Group term for faucets, taps, and similar fixtures.",
+            "english": "Water fixtures / Sanitary fixtures",
+            "mapped": "수전류"
+        },
+        "수중펌프": {
+            "description": "Pump designed to operate submerged in liquids.",
+            "english": "Submersible pump / Underwater pump",
+            "mapped": "수중펌프"
+        },
+        "순간온수기": {
+            "description": "Water heater that heats on demand without a storage tank.",
+            "english": "Instantaneous water heater / Tankless water heater",
+            "mapped": "순간온수기"
+        },
+        "슁글": {
+            "description": "Individual roofing element covering the roof surface.",
+            "english": "Shingle (roof shingle)",
+            "mapped": "슁글"
+        },
+        "스위치": {
+            "description": "Device to open or close an electrical circuit.",
+            "english": "Switch (electrical switch)",
+            "mapped": "스위치"
+        },
+        "스크류": {
+            "description": "Threaded fastener used to join materials.",
+            "english": "Screw / Fastener",
+            "mapped": "스크류"
+        },
+        "스프링클러": {
+            "description": "Fire suppression sprinkler head activated by heat.",
+            "english": "Sprinkler (fire sprinkler)",
+            "mapped": "스프링클러"
+        },
+        "스피커": {
+            "description": "Audio output device for sound reproduction.",
+            "english": "Speaker",
+            "mapped": "스피커"
+        },
+        "슬라이드바": {
+            "mapped": "슬라이드바",
+            "description": "Adjustable vertical bar used to hold a shower head at different heights.",
+            "english": "Shower Slide Bar"
+        },
+        "시멘트": {
+            "description": "Binder material used in concrete and mortar.",
+            "english": "Cement",
+            "mapped": "시멘트"
+        },
+        "신발장": {
+            "description": "Storage unit for footwear.",
+            "english": "Shoe cabinet / Shoe rack",
+            "mapped": "신발장"
+        },
+        "실리콘": {
+            "description": "Flexible sealant used for joints and sealing.",
+            "english": "Silicone sealant / Silicone",
+            "mapped": "실리콘"
+        },
+        "심장충격기": {
+            "description": "Portable device for delivering lifesaving defibrillation shocks.",
+            "english": "Automated External Defibrillator (AED)",
+            "mapped": "심장충격기"
+        },
+        "심장충격기 배터리": {
+            "description": "Battery pack that powers an AED unit.",
+            "english": "AED battery / Defibrillator battery",
+            "mapped": "심장충격기 배터리"
+        },
+        "심장충격기패드": {
+            "description": "Disposable electrode pads for AED use.",
+            "english": "AED pads / Defibrillator pads",
+            "mapped": "심장충격기패드"
+        },
+        "싱크대": {
+            "description": "Sink installed in the kitchen for dishwashing.",
+            "english": "Kitchen sink",
+            "mapped": "싱크대"
+        },
+        "안내시설": {
+            "description": "Signs and information boards for guidance.",
+            "english": "Signage / Information facilities",
+            "mapped": "안내시설"
+        },
+        "앉음벽": {
+            "description": "Low wall designed for seating.",
+            "english": "Seating wall / Low sitting wall",
+            "mapped": "앉음벽"
+        },
+        "압력탱크": {
+            "description": "Vessel maintaining system pressure and reducing pump cycling.",
+            "english": "Pressure tank",
+            "mapped": "압력탱크"
+        },
+        "액세서리": {
+            "description": "Miscellaneous small parts or finishing items.",
+            "english": "Accessories / Fittings",
+            "mapped": "액세서리"
+        },
+        "양변기": {
+            "description": "Sanitary fixture for human waste disposal.",
+            "english": "Toilet (water closet)",
+            "mapped": "양변기"
+        },
+        "양변기부속": {
+            "description": "Parts and components associated with a toilet (seat, flush parts).",
+            "english": "Toilet fittings / Toilet accessories",
+            "mapped": "양변기부속"
+        },
+        "에어컨": {
+            "description": "Cooling unit that regulates indoor temperature and humidity.",
+            "english": "Air conditioner (A/C)",
+            "mapped": "에어컨"
+        },
+        "연결단자": {
+            "description": "Electrical terminal for connecting cables.",
+            "english": "Terminal connector / Connection terminal",
+            "mapped": "연결단자"
+        },
+        "연료통": {
+            "description": "Tank storing fuel for generators or equipment.",
+            "english": "Fuel tank",
+            "mapped": "연료통"
+        },
+        "열교환기": {
+            "description": "Device that transfers heat between two fluids.",
+            "english": "Heat exchanger",
+            "mapped": "열교환기"
+        },
+        "열쇠고리": {
+            "description": "Device holding keys together.",
+            "english": "Key ring / Key fob",
+            "mapped": "열쇠고리"
+        },
+        "예비펌프": {
+            "description": "Backup pump used if primary pump fails.",
+            "english": "Standby pump / Backup pump",
+            "mapped": "예비펌프"
+        },
+        "오/배수배관": {
+            "description": "Piping for delivering and removing water.",
+            "english": "Water supply & drainage pipes",
+            "mapped": "오/배수배관"
+        },
+        "온수분배기": {
+            "mapped": "온수분배기",
+            "description": "Device that distributes hot water evenly to various plumbing lines.",
+            "english": "Hot Water Distributor"
+        },
+        "옹벽": {
+            "description": "Wall that holds back soil or earth.",
+            "english": "Retaining wall",
+            "mapped": "옹벽"
+        },
+        "외벽": {
+            "description": "Building outer surface that protects interior from weather.",
+            "english": "Exterior wall / Outer wall",
+            "mapped": "외벽"
+        },
+        "욕실배기팬": {
+            "description": "Fan that ventilates bathroom moisture and odors.",
+            "english": "Bathroom exhaust fan",
+            "mapped": "욕실배기팬"
+        },
+        "욕실장": {
+            "description": "Storage unit installed in bathroom.",
+            "english": "Bathroom cabinet / Vanity cabinet",
+            "mapped": "욕실장"
+        },
+        "욕조": {
+            "description": "Tub for bathing.",
+            "english": "Bathtub",
+            "mapped": "욕조"
+        },
+        "우수배관": {
+            "mapped": "우수배관",
+            "description": "Pipe system used for collecting and draining rainwater from roofs or surfaces.",
+            "english": "Rainwater Pipe"
+        },
+        "운동기구": {
+            "description": "Machines or devices for physical exercise.",
+            "english": "Exercise equipment / Fitness equipment",
+            "mapped": "운동기구"
+        },
+        "울타리": {
+            "description": "Barrier used to enclose or separate areas.",
+            "english": "Fence",
+            "mapped": "울타리"
+        },
+        "울타리류": {
+            "description": "Various types of fence installations.",
+            "english": "Fencing / Types of fences",
+            "mapped": "울타리류"
+        },
+        "원격검침": {
+            "description": "Systems for remotely collecting utility meter data.",
+            "english": "Remote metering / Remote metering system",
+            "mapped": "원격검침"
+        },
+        "월패드": {
+            "description": "Wall-mounted home automation control panel.",
+            "english": "Wall pad / Home control wall pad",
+            "mapped": "월패드"
+        },
+        "유도등": {
+            "description": "Lighting that indicates exit routes during power loss.",
+            "english": "Emergency/exit light / Guiding light",
+            "mapped": "유도등"
+        },
+        "유리": {
+            "description": "Glass panes used in windows, doors, or partitions.",
+            "english": "Glass / Glazing",
+            "mapped": "유리"
+        },
+        "유리창호": {
+            "description": "Window assembly including glass and frame.",
+            "english": "Glazed window / Window glazing",
+            "mapped": "유리창호"
+        },
+        "음식물탈수기": {
+            "description": "Machine that reduces moisture in food waste.",
+            "english": "Food waste dehydrator / Food waste dewatering machine",
+            "mapped": "음식물탈수기"
+        },
+        "인터폰": {
+            "description": "Communication device between rooms or at entrances.",
+            "english": "Intercom / Video intercom",
+            "mapped": "인터폰"
+        },
+        "입구": {
+            "description": "Primary access point into a building or space.",
+            "english": "Entrance / Entryway",
+            "mapped": "입구"
+        },
+        "자동제어": {
+            "description": "System that automates building equipment operation.",
+            "english": "Automatic control system / Automation control",
+            "mapped": "자동제어"
+        },
+        "자전거보관소": {
+            "description": "Covered area for storing bicycles.",
+            "english": "Bicycle parking / Bike rack shelter",
+            "mapped": "자전거보관소"
+        },
+        "잔디": {
+            "description": "Turf area planted with grass.",
+            "english": "Grass / Lawn",
+            "mapped": "잔디"
+        },
+        "잔디보호매트": {
+            "description": "Mats protecting turf from heavy use.",
+            "english": "Grass protection mat / Turf protection mat",
+            "mapped": "잔디보호매트"
+        },
+        "잠금장치": {
+            "mapped": "잠금장치",
+            "description": "Mechanism for securing doors, windows, or cabinets to prevent unauthorized access.",
+            "english": "Locking Device"
+        },
+        "장애인시설": {
+            "mapped": "장애인시설",
+            "description": "Equipment or installation designed to assist people with disabilities, such as ramps or handrails.",
+            "english": "Accessibility Facility"
+        },
+        "장판": {
+            "description": "Flexible flooring material used in interiors.",
+            "english": "Sheet vinyl flooring / Vinyl flooring",
+            "mapped": "장판"
+        },
+        "전기실기": {
+            "description": "Equipment housed in the electrical control room.",
+            "english": "Electrical room equipment / Electrical room devices",
+            "mapped": "전기실기"
+        },
+        "전화기": {
+            "description": "Device for voice communication over telephone networks.",
+            "english": "Telephone",
+            "mapped": "전화기"
+        },
+        "전환개폐기": {
+            "description": "Switch that transfers power source between supplies.",
+            "english": "Transfer switch / Changeover switch",
+            "mapped": "전환개폐기"
+        },
+        "절수형페달": {
+            "description": "Foot-operated water-saving valve for taps.",
+            "english": "Water-saving pedal (pedal-operated faucet)",
+            "mapped": "절수형페달"
+        },
+        "점검구": {
+            "description": "Panel providing access to concealed systems.",
+            "english": "Inspection opening / Access panel",
+            "mapped": "점검구"
+        },
+        "정류기": {
+            "description": "Device converting AC to DC power.",
+            "english": "Rectifier",
+            "mapped": "정류기"
+        },
+        "정자": {
+            "description": "Small outdoor shelter structure for seating.",
+            "english": "Gazebo / Pavilion",
+            "mapped": "정자"
+        },
+        "제어반": {
+            "description": "Enclosure housing operational controls and switches.",
+            "english": "Control panel / Control cabinet",
+            "mapped": "제어반"
+        },
+        "제연댐퍼": {
+            "description": "Damper that prevents smoke spread through ducts.",
+            "english": "Smoke-control damper / Smoke damper",
+            "mapped": "제연댐퍼"
+        },
+        "조경수": {
+            "description": "Trees used for landscape aesthetics.",
+            "english": "Ornamental trees / Landscaping trees",
+            "mapped": "조경수"
+        },
+        "조명기구": {
+            "description": "Installed lights that provide interior or exterior illumination.",
+            "english": "Lighting fixture / Light fixture",
+            "mapped": "조명기구"
+        },
+        "조절기": {
+            "description": "Device that adjusts settings (temperature, flow, etc.).",
+            "english": "Controller / Regulator",
+            "mapped": "조절기"
+        },
+        "주방TV": {
+            "description": "Television installed in a kitchen area.",
+            "english": "Kitchen TV",
+            "mapped": "주방TV"
+        },
+        "주방가구": {
+            "description": "Built-in storage and fixtures for kitchens.",
+            "english": "Kitchen cabinets / Kitchen furniture",
+            "mapped": "주방가구"
+        },
+        "주방상판": {
+            "mapped": "주방상판",
+            "description": "Surface in a kitchen used for food preparation, often made of stone or laminate.",
+            "english": "Kitchen Countertop"
+        },
+        "중계기": {
+            "description": "Equipment that amplifies or rebroadcasts signals.",
+            "english": "Repeater / Signal repeater",
+            "mapped": "중계기"
+        },
+        "증폭기": {
+            "description": "Device that increases signal strength.",
+            "english": "Amplifier (signal amplifier)",
+            "mapped": "증폭기"
+        },
+        "지붕": {
+            "description": "Building top structure protecting interior from weather.",
+            "english": "Roof",
+            "mapped": "지붕"
+        },
+        "지시계": {
+            "description": "Instrument indicating pressure, level, or flow values.",
+            "english": "Gauge / Indicator",
+            "mapped": "지시계"
+        },
+        "지하저수조": {
+            "description": "Subsurface tank for storing water or liquids.",
+            "english": "Underground reservoir / Underground storage tank",
+            "mapped": "지하저수조"
+        },
+        "차단기": {
+            "description": "Device that interrupts electrical flow on overload/fault.",
+            "english": "Circuit breaker",
+            "mapped": "차단기"
+        },
+        "차도": {
+            "description": "Vehicular access surface for cars.",
+            "english": "Roadway / Driveway",
+            "mapped": "차도"
+        },
+        "차량통제시스템": {
+            "description": "System managing vehicle entry and exit.",
+            "english": "Vehicle access control system",
+            "mapped": "차량통제시스템"
+        },
+        "차압유량조절밸브": {
+            "description": "Valve that regulates flow based on pressure differential.",
+            "english": "Differential pressure / Flow control valve",
+            "mapped": "차압유량조절밸브"
+        },
+        "창문": {
+            "mapped": "창문",
+            "description": "Opening in a wall fitted with glass to allow light and ventilation.",
+            "english": "Window"
+        },
+        "창틀": {
+            "description": "Structural frame that supports glazing in a window.",
+            "english": "Window frame / Sash",
+            "mapped": "창틀"
+        },
+        "천장": {
+            "description": "Overhead interior surface covering a room.",
+            "english": "Ceiling",
+            "mapped": "천장"
+        },
+        "체육시설물": {
+            "description": "Installed equipment for sports and exercise.",
+            "english": "Sports facilities / Exercise equipment",
+            "mapped": "체육시설물"
+        },
+        "초인종": {
+            "description": "Device that signals visitor arrival at an entrance.",
+            "english": "Doorbell",
+            "mapped": "초인종"
+        },
+        "초화류": {
+            "description": "Seasonal or perennial flowering plants.",
+            "english": "Flowering plants / Herbaceous plants",
+            "mapped": "초화류"
+        },
+        "축전지": {
+            "description": "Large-capacity batteries for backup power.",
+            "english": "Battery bank / Storage battery",
+            "mapped": "축전지"
+        },
+        "충압펌프": {
+            "description": "Pump that increases water pressure in supply lines.",
+            "english": "Pressure boosting pump / Pressure pump",
+            "mapped": "충압펌프"
+        },
+        "커버": {
+            "description": "Protective lid or enclosure for equipment.",
+            "english": "Cover / Protective cover",
+            "mapped": "커버"
+        },
+        "컴퓨터": {
+            "description": "Electronic system for data processing and control.",
+            "english": "Computer / PC",
+            "mapped": "컴퓨터"
+        },
+        "콘덴서": {
+            "description": "Electrical component that stores charge or acts as filter.",
+            "english": "Capacitor / Condenser",
+            "mapped": "콘덴서"
+        },
+        "콘센트": {
+            "description": "Socket providing electrical power for appliances.",
+            "english": "Electrical outlet / Power outlet",
+            "mapped": "콘센트"
+        },
+        "콘크리트": {
+            "description": "Structural building material made from cement and aggregates.",
+            "english": "Concrete",
+            "mapped": "콘크리트"
+        },
+        "타이머": {
+            "description": "Device that controls operations based on set time intervals.",
+            "english": "Timer",
+            "mapped": "타이머"
+        },
+        "타일": {
+            "description": "Ceramic or stone finish material for walls or floors.",
+            "english": "Tile",
+            "mapped": "타일"
+        },
+        "탄성포장재": {
+            "description": "Impact-absorbing surface material for playgrounds.",
+            "english": "Elastic (resilient) surfacing / Rubberized surfacing",
+            "mapped": "탄성포장재"
+        },
+        "태양광설비": {
+            "description": "Solar panels and inverters generating electricity.",
+            "english": "Solar power system / Photovoltaic system",
+            "mapped": "태양광설비"
+        },
+        "테이블": {
+            "description": "Furniture used for placing items or seating.",
+            "english": "Table",
+            "mapped": "테이블"
+        },
+        "통신기타": {
+            "description": "Various telecommunications devices and accessories.",
+            "english": "Other communications equipment / Comms miscellaneous",
+            "mapped": "통신기타"
+        },
+        "통신단자함": {
+            "description": "Enclosure for telecom wiring terminations.",
+            "english": "Communication junction box / Telecom junction box",
+            "mapped": "통신단자함"
+        },
+        "통신콘센트": {
+            "description": "Wall outlet for phone or data connections.",
+            "english": "Communication outlet / Data/phone outlet",
+            "mapped": "통신콘센트"
+        },
+        "통행차단시설": {
+            "description": "Device that blocks or controls vehicle passage.",
+            "english": "Traffic barrier / Access control barrier",
+            "mapped": "통행차단시설"
+        },
+        "트렌치": {
+            "description": "Long narrow channel for drainage or utilities.",
+            "english": "Trench / Trench drain",
+            "mapped": "트렌치"
+        },
+        "파고라": {
+            "description": "Open garden structure providing shade and decoration.",
+            "english": "Pergola",
+            "mapped": "파고라"
+        },
+        "패킹": {
+            "description": "Material used to seal joints and prevent leaks.",
+            "english": "Packing / Gasket / Seal",
+            "mapped": "패킹"
+        },
+        "팽창탱크": {
+            "description": "Tank absorbing thermal expansion in closed heating systems.",
+            "english": "Expansion tank",
+            "mapped": "팽창탱크"
+        },
+        "펌프": {
+            "description": "Mechanical device for moving fluids.",
+            "english": "Pump",
+            "mapped": "펌프"
+        },
+        "페인트": {
+            "description": "Liquid applied to surfaces for protection or decoration.",
+            "english": "Paint / Coating",
+            "mapped": "페인트"
+        },
+        "플로어신지": {
+            "description": "Hinge installed in the floor to support door rotation.",
+            "english": "Floor hinge / Floor-mounted door hinge",
+            "mapped": "플로어신지"
+        },
+        "피뢰설비": {
+            "description": "System protecting structure from lightning strikes.",
+            "english": "Lightning protection system / Lightning arrestor",
+            "mapped": "피뢰설비"
+        },
+        "하부장": {
+            "mapped": "하부장",
+            "description": "Storage cabinet installed below countertops in kitchens or bathrooms.",
+            "english": "Lower Cabinet"
+        },
+        "현관문": {
+            "mapped": "현관문",
+            "description": "Main exterior door that serves as the entry point of a building or home.",
+            "english": "Entrance Door"
+        },
+        "현수막거치대": {
+            "description": "Frame used to hang banners or advertisements.",
+            "english": "Banner frame / Banner stand",
+            "mapped": "현수막거치대"
+        },
+        "호스": {
+            "mapped": "호스",
+            "description": "Flexible tube used to convey water or other fluids.",
+            "english": "Hose"
+        },
+        "홈넷서버": {
+            "description": "Local server providing home network services.",
+            "english": "Home network server / HomeNet server",
+            "mapped": "홈넷서버"
+        },
+        "홈통": {
+            "mapped": "홈통",
+            "description": "Pipe or channel that collects and directs rainwater from the roof to drainage systems.",
+            "english": "Gutter / Downspout"
+        },
+        "화단": {
+            "description": "Designated planting area for flowers.",
+            "english": "Flower bed / Planting bed",
+            "mapped": "화단"
+        },
+        "화면": {
+            "description": "Visual output panel for devices or control systems.",
+            "english": "Display / Screen",
+            "mapped": "화면"
+        },
+        "화재감지기": {
+            "description": "Device that senses smoke or fire.",
+            "english": "Fire detector / Smoke detector",
+            "mapped": "화재감지기"
+        },
+        "화재경보기": {
+            "description": "Alarm sounding device indicating fire condition.",
+            "english": "Fire alarm / Fire buzzer",
+            "mapped": "화재경보기"
+        },
+        "화재수신반": {
+            "description": "Central unit that receives and processes fire alarm signals.",
+            "english": "Fire alarm control panel",
+            "mapped": "화재수신반"
+        },
+        "환기배관": {
+            "description": "Ductwork conveying air for ventilation systems.",
+            "english": "Ventilation duct / Ventilation piping",
+            "mapped": "환기배관"
+        },
+        "환기설비": {
+            "description": "Equipment that circulates or exchanges indoor air.",
+            "english": "Ventilation system / Ventilation equipment",
+            "mapped": "환기설비"
+        },
+        "환풍기": {
+            "description": "Fan used to exhaust air from rooms.",
+            "english": "Ventilator / Exhaust fan",
+            "mapped": "환풍기"
+        },
+        "흡출기": {
+            "description": "Device that extracts fumes or air from a space.",
+            "english": "Extractor / Exhaust extractor",
+            "mapped": "흡출기"
+        },
+        "히터": {
+            "description": "Device that provides heat for indoor spaces.",
+            "english": "Heater",
+            "mapped": "히터"
+        }
+    },
+    "하자유형": {
+        "가스누설": {
+            "description": "Gas is leaking from pipes, valves, or connections. This is a critical safety issue that requires immediate attention.",
+            "english": "Gas Leak",
+            "mapped": "가스누설"
+        },
+        "가스누출": {
+            "description": "A dangerous issue where gas escapes from a pipe or container in a building",
+            "english": "Gas Leak",
+            "mapped": "가스누출"
+        },
+        "개폐불량": {
+            "description": "Doors, windows, or drawers do not open or close smoothly, getting stuck or feeling stiff.",
+            "english": "Opening/Closing Failure",
+            "mapped": "개폐불량"
+        },
+        "건축폐기물": {
+            "description": "Unwanted or surplus materials generated during construction processes",
+            "english": "Construction waste",
+            "mapped": "건축폐기물"
+        },
+        "검침상이": {
+            "description": "A defect where a structure or part of it is not upright but inclined or slanted",
+            "english": "Tilted or Leaning",
+            "mapped": "검침상이"
+        },
+        "결로": {
+            "description": "Water droplets form on surfaces like walls and windows due to temperature differences, as moisture from the air condenses. It is a primary cause of mold.",
+            "english": "Condensation",
+            "mapped": "결로"
+        },
+        "결속재미제거": {
+            "description": "The process of eliminating substances that hold or draw other materials together in construction or housing.",
+            "english": "Removal of Binding Agents",
+            "mapped": "결속재미제거"
+        },
+        "경계재불량": {
+            "description": "A defect or issue related to the use of lightweight materials in construction or housing",
+            "english": "Lightweight Material Defect",
+            "mapped": "경계재불량"
+        },
+        "경화": {
+            "description": "A process or defect where material, like concrete or cement, becomes solid or firm",
+            "english": "Hardening",
+            "mapped": "경화"
+        },
+        "고사": {
+            "description": "A defect referring to the process of becoming progressively worse over time, often due to wear and tear or aging",
+            "english": "Deterioration",
+            "mapped": "고사"
+        },
+        "고장": {
+            "description": "A machine, electrical device, or facility is not functioning correctly. Similar to 'Malfunction' but often refers to mechanical issues.",
+            "english": "Breakdown / Fault",
+            "mapped": "고장"
+        },
+        "고정불량": {
+            "description": "Attached items like shelves, mirrors, doorknobs, or outlets are not securely fastened and are loose or wobbly.",
+            "english": "Loose fixture / Poor fastening",
+            "mapped": "고정불량"
+        },
+        "곰팡이": {
+            "description": "Fungi that grow in damp areas (due to condensation, leaks). It is unsightly and can cause respiratory problems.",
+            "english": "Mold / Mildew",
+            "mapped": "곰팡이"
+        },
+        "구멍": {
+            "description": "An unintentional hole in a wall, floor, or door.",
+            "english": "Hole / Puncture",
+            "mapped": "구멍"
+        },
+        "구배불량": {
+            "description": "The slope of a floor (in a bathroom, balcony, etc.) is incorrect, causing water to pool instead of flowing to the drain.",
+            "english": "Improper Slope / Gradient",
+            "mapped": "구배불량"
+        },
+        "규격미달": {
+            "description": "A defect or issue where the construction, housing, or building does not meet the required standards or specifications",
+            "english": "Non-compliance with standards",
+            "mapped": "규격미달"
+        },
+        "균열": {
+            "description": "A line-shaped break that appears on the surface of concrete or finishing materials like walls, floors, or ceilings. It can be caused by structural issues or material shrinkage/expansion.",
+            "english": "Crack",
+            "mapped": "균열"
+        },
+        "그을림": {
+            "description": "Damage or discoloration caused by heat or fire on a surface",
+            "english": "Scorching",
+            "mapped": "그을림"
+        },
+        "긁힘": {
+            "description": "Similar to a 'nick' or 'dent' (흠집), but specifically refers to a mark made by a sharp object being dragged across a surface.",
+            "english": "Scratch",
+            "mapped": "긁힘"
+        },
+        "급수공급불량": {
+            "description": "A defect or issue where the supply of water is inadequate or not functioning properly",
+            "english": "Poor Water Supply",
+            "mapped": "급수공급불량"
+        },
+        "긴결재미제거": {
+            "description": "The process of eliminating long, straight cracks that occur along the length of a structure or material",
+            "english": "Removal of Longitudinal Cracks",
+            "mapped": "긴결재미제거"
+        },
+        "난방불량": {
+            "description": "The boiler does not work, or if it does, the room temperature does not rise.",
+            "english": "Heating Failure",
+            "mapped": "난방불량"
+        },
+        "내구연한경과": {
+            "description": "Refers to the condition where a building or structure has surpassed its expected lifespan, potentially leading to various defects or issues.",
+            "english": "Durability lifespan elapsed",
+            "mapped": "내구연한경과"
+        },
+        "노후": {
+            "description": "The process or state of a building or structure becoming old or deteriorated",
+            "english": "Aging",
+            "mapped": "노후"
+        },
+        "녹물": {
+            "description": "A reddish- or yellowish-brown flaky coating of iron oxide that is formed on iron or steel by oxidation, especially in the presence of moisture.",
+            "english": "Rust",
+            "mapped": "녹물"
+        },
+        "녹발생": {
+            "description": "An issue where metal parts of a building or structure start to corrode or rust",
+            "english": "Rust occurrence",
+            "mapped": "녹발생"
+        },
+        "누락": {
+            "description": "A specific part or finish is missing from the construction (e.g., missing silicone sealant, missing components).",
+            "english": "Omission / Missing Item",
+            "mapped": "누락"
+        },
+        "누수": {
+            "description": "Water seeps into the building's interior (walls, ceiling, floor) due to a damaged waterproof layer, broken pipes, etc.",
+            "english": "Water Leak",
+            "mapped": "누수"
+        },
+        "누유": {
+            "description": "Unwanted escape of water or gas from a pipe, tank, or other container in a building",
+            "english": "Leakage",
+            "mapped": "누유"
+        },
+        "누전": {
+            "description": "Electricity flows outside its intended circuit, often due to damaged wire insulation. Poses a risk of electric shock or fire.",
+            "english": "Electrical Leakage",
+            "mapped": "누전"
+        },
+        "단선": {
+            "description": "An electrical wire is cut, interrupting the power supply.",
+            "english": "Disconnected Wire",
+            "mapped": "단선"
+        },
+        "단전": {
+            "description": "A disruption or loss of electricity supply in a building or construction site",
+            "english": "Power outage",
+            "mapped": "단전"
+        },
+        "단차": {
+            "description": "An uneven difference in height between two adjacent surfaces, such as tiles or floorboards.",
+            "english": "Uneven Level / Step",
+            "mapped": "단차"
+        },
+        "덮개간격과다": {
+            "description": "A defect where the distance between the reinforcement and the surface of the concrete is too large",
+            "english": "Excessive Cover Spacing",
+            "mapped": "덮개간격과다"
+        },
+        "덮개망설치": {
+            "description": "The process of installing a protective netting to prevent debris or objects from falling during construction",
+            "english": "Cover Net Installation",
+            "mapped": "덮개망설치"
+        },
+        "도배불량": {
+            "description": "A defect or issue related to improper or poor quality wallpaper installation",
+            "english": "Poor wallpapering",
+            "mapped": "도배불량"
+        },
+        "도장불량": {
+            "description": "A defect in the quality or application of paint on a building's surface",
+            "english": "Poor paintwork",
+            "mapped": "도장불량"
+        },
+        "돌출": {
+            "description": "A defect where a part of the building or structure extends beyond its intended surface",
+            "english": "Protrusion",
+            "mapped": "돌출"
+        },
+        "동선추가/연결": {
+            "description": "Issue related to the addition or connection of pathways within a structure",
+            "english": "Additional/Connected Pathway",
+            "mapped": "동선추가/연결"
+        },
+        "뒤틀림": {
+            "description": "A structural defect where a component has been warped or distorted",
+            "english": "Twisting",
+            "mapped": "뒤틀림"
+        },
+        "들뜸": {
+            "description": "Wallpaper, vinyl sheets, tiles, or flooring material is detaching from the surface due to poor adhesion.",
+            "english": "Lifting / Peeling",
+            "mapped": "들뜸"
+        },
+        "마감불량": {
+            "description": "The final touches, such as wallpapering, painting, or caulking, are messy or incomplete.",
+            "english": "Poor Finishing",
+            "mapped": "마감불량"
+        },
+        "마구리불량": {
+            "description": "The finish on the cut edge or end of a material is rough or messy.",
+            "english": "Poor Edge Finishing",
+            "mapped": "마구리불량"
+        },
+        "마모": {
+            "description": "Deterioration or damage through ordinary use over time",
+            "english": "Wear and Tear",
+            "mapped": "마모"
+        },
+        "막힘": {
+            "description": "Drains or pipes are obstructed by foreign matter, preventing water from flowing freely.",
+            "english": "Clogging / Blockage",
+            "mapped": "막힘"
+        },
+        "면불량": {
+            "description": "A surface like a wall or floor is not flat and has bumps or depressions.",
+            "english": "Uneven Surface",
+            "mapped": "면불량"
+        },
+        "목재썩음": {
+            "description": "A type of fungal decay in wooden structures, often causing structural damage",
+            "english": "Wood Rot",
+            "mapped": "목재썩음"
+        },
+        "무너짐": {
+            "description": "A structural failure in a building or other construction",
+            "english": "Collapse",
+            "mapped": "무너짐"
+        },
+        "물고임": {
+            "description": "Water collects in a specific area and does not drain away, typically due to an improper slope.",
+            "english": "Water Pooling",
+            "mapped": "물고임"
+        },
+        "미설치": {
+            "description": "Refers to a component or system that is missing or not put in place in a building or construction project",
+            "english": "Not Installed",
+            "mapped": "미설치"
+        },
+        "미장누락": {
+            "description": "A defect where the plastering process has been skipped or missed in certain areas of the building",
+            "english": "Omission of Plastering",
+            "mapped": "미장누락"
+        },
+        "박리": {
+            "description": "A paint or coating layer flakes or peels off like a film. It often implies a more severe condition than 'Lifting' (들뜸).",
+            "english": "Delamination / Flaking",
+            "mapped": "박리"
+        },
+        "방수불량": {
+            "description": "Leaks occur because the waterproofing in areas requiring it, such as bathrooms or balconies, is inadequate.",
+            "english": "Waterproofing Failure",
+            "mapped": "방수불량"
+        },
+        "방전": {
+            "description": "A defect or issue related to electrical systems, often referring to an unexpected release of electricity",
+            "english": "Discharge",
+            "mapped": "방전"
+        },
+        "배수불량": {
+            "description": "Water does not drain efficiently from sinks, washbasins, or floor drains.",
+            "english": "Poor Drainage",
+            "mapped": "배수불량"
+        },
+        "백시멘트불량": {
+            "description": "A defect related to the improper use or quality of white cement in construction.",
+            "english": "White Cement Defect",
+            "mapped": "백시멘트불량"
+        },
+        "법면/돌쌓기하자": {
+            "description": "Issues related to the improper construction or damage of stone or retaining walls",
+            "english": "Stone Wall/Retaining Wall Defects",
+            "mapped": "법면/돌쌓기하자"
+        },
+        "벗겨짐": {
+            "description": "A defect where a layer or coating comes off, typically referring to paint or plaster.",
+            "english": "Peeling",
+            "mapped": "벗겨짐"
+        },
+        "벨브불량": {
+            "description": "A problem or malfunction in a valve, affecting the control of fluid flow.",
+            "english": "Valve Defect",
+            "mapped": "벨브불량"
+        },
+        "벽돌불량": {
+            "description": "A problem or fault in the quality, formation, or installation of bricks in a structure",
+            "english": "Brick Defect",
+            "mapped": "벽돌불량"
+        },
+        "변색": {
+            "description": "The original color of a material has changed due to factors like sunlight, chemicals, or moisture.",
+            "english": "Discoloration",
+            "mapped": "변색"
+        },
+        "변형": {
+            "description": "Doors, window frames, or furniture have bent or twisted from their original shape due to heat or moisture.",
+            "english": "Deformation / Warping",
+            "mapped": "변형"
+        },
+        "병충해발생": {
+            "description": "The presence of pests causing damage to the building or housing structure",
+            "english": "Pest Infestation",
+            "mapped": "병충해발생"
+        },
+        "복합하자": {
+            "description": "A type of defect that involves multiple interconnected issues in a building or construction project.",
+            "english": "Composite Defect",
+            "mapped": "복합하자"
+        },
+        "부식": {
+            "description": "Metal materials deteriorate and rust due to chemical reactions with oxygen and moisture in the air.",
+            "english": "Corrosion / Rust",
+            "mapped": "부식"
+        },
+        "분실": {
+            "description": "The state of no longer having something or as much of something; typically referring to building materials or tools in a construction context",
+            "english": "Loss",
+            "mapped": "분실"
+        },
+        "뿜칠하자": {
+            "description": "A defect characterized by small holes or cavities on the surface of concrete structures caused by trapped air or water.",
+            "english": "Blowhole defect",
+            "mapped": "뿜칠하자"
+        },
+        "사용": {
+            "description": "Refers to the operation or function of a building or its parts",
+            "english": "Usage",
+            "mapped": "사용"
+        },
+        "사인불량": {
+            "description": "A problem or issue related to the signs or symbols used in a building or construction site",
+            "english": "Signage Defect",
+            "mapped": "사인불량"
+        },
+        "설비계통불량": {
+            "description": "A defect or malfunction in the building's mechanical and electrical systems",
+            "english": "Facility System Defect",
+            "mapped": "설비계통불량"
+        },
+        "설치불량": {
+            "description": "An appliance or material has been installed incorrectly, not according to the design or standards.",
+            "english": "Poor Installation",
+            "mapped": "설치불량"
+        },
+        "센서고장": {
+            "description": "A defect where a sensor in a building's system fails to operate correctly",
+            "english": "Sensor Malfunction",
+            "mapped": "센서고장"
+        },
+        "소음": {
+            "description": "Abnormal or excessive sound generated from sources like opening/closing doors, operating fans, or between floors.",
+            "english": "Excessive noise / Unusual noise",
+            "mapped": "소음"
+        },
+        "손잡이미설치": {
+            "description": "A defect or issue where a handle (such as door or cabinet handle) has not been installed",
+            "english": "Handle Not Installed",
+            "mapped": "손잡이미설치"
+        },
+        "손잡이불량": {
+            "description": "A problem or malfunction with a door or window handle",
+            "english": "Handle Defect",
+            "mapped": "손잡이불량"
+        },
+        "수압불량": {
+            "description": "The water pressure from a faucet or shower head is abnormally weak.",
+            "english": "Low Water Pressure",
+            "mapped": "수압불량"
+        },
+        "수직불량": {
+            "description": "A defect related to the vertical alignment or stability of a structure",
+            "english": "Vertical Defect",
+            "mapped": "수직불량"
+        },
+        "수직수평불량": {
+            "description": "An item like a door, window, or shelf is not installed perfectly vertically (plumb) or horizontally (level).",
+            "english": "Not Plumb/Level",
+            "mapped": "수직수평불량"
+        },
+        "수평불량": {
+            "description": "A defect related to the lack of horizontal alignment in construction or building structures",
+            "english": "Horizontal Defect",
+            "mapped": "수평불량"
+        },
+        "시공불량": {
+            "description": "A broad term for any defect arising from construction that does not follow the blueprints or standard specifications.",
+            "english": "Defective Construction",
+            "mapped": "시공불량"
+        },
+        "시설/부속추가": {
+            "description": "Refers to the addition or expansion of facilities or attachments in a building or property",
+            "english": "Facility/Addition",
+            "mapped": "시설/부속추가"
+        },
+        "시트지불량": {
+            "description": "A defect or issue related to the quality or installation of sheet materials in construction or housing",
+            "english": "Sheet Defect",
+            "mapped": "시트지불량"
+        },
+        "식재불일치": {
+            "description": "A defect where the actual finishing materials used in construction do not match the ones specified in the design or contract",
+            "english": "Mismatch in Finishing Materials",
+            "mapped": "식재불일치"
+        },
+        "신규(추가)설치": {
+            "description": "Refers to the installation of new or additional elements or systems in a building or construction project",
+            "english": "New (Additional) Installation",
+            "mapped": "신규(추가)설치"
+        },
+        "신축줄눈": {
+            "description": "A type of defect that refers to cracks in the building materials caused by shrinkage as they dry",
+            "english": "Shrinkage crack",
+            "mapped": "신축줄눈"
+        },
+        "실리콘불량": {
+            "description": "A problem related to the improper application or failure of silicone sealants in construction or housing",
+            "english": "Silicone Defect",
+            "mapped": "실리콘불량"
+        },
+        "썩음": {
+            "description": "The process of rotting or decomposition, often found in wooden structures or materials",
+            "english": "Decay",
+            "mapped": "썩음"
+        },
+        "악취": {
+            "description": "An unpleasant smell emanating from drains, sinks, or vents.",
+            "english": "Foul odor",
+            "mapped": "악취"
+        },
+        "에폭시하자": {
+            "description": "A problem or flaw related to the application or performance of epoxy resin, often used in flooring or structural repairs.",
+            "english": "Epoxy Defect",
+            "mapped": "에폭시하자"
+        },
+        "역류": {
+            "description": "Waste flows backward from a drain or toilet instead of flowing out.",
+            "english": "Backflow",
+            "mapped": "역류"
+        },
+        "영상불량": {
+            "description": "The screen on a device like a wall pad, CCTV, or video phone is blank or distorted.",
+            "english": "Video Failure",
+            "mapped": "영상불량"
+        },
+        "오염": {
+            "description": "A surface has a mark, spot, or dirt that cannot be easily removed.",
+            "english": "Stain / Contamination",
+            "mapped": "오염"
+        },
+        "외단열불량": {
+            "description": "A problem with the insulation installed on the exterior of a building",
+            "english": "External Insulation Defect",
+            "mapped": "외단열불량"
+        },
+        "유압불량": {
+            "description": "A defect or issue related to the inadequate or faulty operation of a hydraulic system in a building or construction.",
+            "english": "Hydraulic Deficiency",
+            "mapped": "유압불량"
+        },
+        "유입": {
+            "description": "The unwanted or unintended entry of water or air into a building or structure",
+            "english": "Infiltration",
+            "mapped": "유입"
+        },
+        "유효기간경과": {
+            "description": "A defect or issue referring to the lapse or end of a certain product or material's effective lifespan in construction or housing.",
+            "english": "Expiration of Validity Period",
+            "mapped": "유효기간경과"
+        },
+        "음향불량": {
+            "description": "A defect or issue related to the quality of sound or noise control in a building or room",
+            "english": "Poor Acoustics",
+            "mapped": "음향불량"
+        },
+        "이격": {
+            "description": "An unintended space has opened up between two components that should be joined, such as a door frame and a wall.",
+            "english": "Gap / Separation",
+            "mapped": "이격"
+        },
+        "이음불량": {
+            "description": "The connection point between two materials (e.g., wallpaper sheets, floorboards) is not smooth or has a gap.",
+            "english": "Poor Joint / Seam",
+            "mapped": "이음불량"
+        },
+        "일조권침해": {
+            "description": "A building defect or issue where a construction obstructs the natural light that should reach a neighboring property",
+            "english": "Infringement of sunlight rights",
+            "mapped": "일조권침해"
+        },
+        "자연환기구불량": {
+            "description": "An issue where the natural airflow system in a building is not functioning properly",
+            "english": "Natural Ventilation Defect",
+            "mapped": "자연환기구불량"
+        },
+        "작동불량": {
+            "description": "A mechanical or electrical device, such as a switch, door lock, or appliance, does not work as intended.",
+            "english": "Malfunction / Operation failure",
+            "mapped": "작동불량"
+        },
+        "잠금불량": {
+            "description": "The lock on a door or window does not engage or disengage properly.",
+            "english": "Locking Failure",
+            "mapped": "잠금불량"
+        },
+        "재고부족": {
+            "description": "A situation where the necessary materials or parts for construction are insufficient or unavailable",
+            "english": "Stock shortage",
+            "mapped": "재고부족"
+        },
+        "전기시설불량": {
+            "description": "A problem or malfunction related to the electrical systems or installations in a building",
+            "english": "Electrical Facility Defect",
+            "mapped": "전기시설불량"
+        },
+        "전원불량": {
+            "description": "A situation where the supply of electricity is disrupted or insufficient",
+            "english": "Power Failure",
+            "mapped": "전원불량"
+        },
+        "전정": {
+            "description": "A defect where a building or structure sinks into the ground over time due to soil instability or other factors",
+            "english": "Settlement",
+            "mapped": "전정"
+        },
+        "점검/교체": {
+            "description": "A process of examining the condition of a building or its components and replacing them if necessary",
+            "english": "Inspection/Replacement",
+            "mapped": "점검/교체"
+        },
+        "점등불량": {
+            "description": "A light fixture does not turn on when the switch is activated.",
+            "english": "Lighting Failure",
+            "mapped": "점등불량"
+        },
+        "접착불량": {
+            "description": "A defect where materials fail to properly bond or stick together",
+            "english": "Poor adhesion",
+            "mapped": "접착불량"
+        },
+        "접촉불량": {
+            "description": "An unstable connection in an electrical circuit or component causes intermittent operation.",
+            "english": "Poor electrical contact / Intermittent contact",
+            "mapped": "접촉불량"
+        },
+        "제어불량": {
+            "description": "A problem or malfunction in the control systems of a building's utilities or appliances",
+            "english": "Control Deficiency",
+            "mapped": "제어불량"
+        },
+        "조도불량": {
+            "description": "A defect or issue related to inadequate lighting in a building or construction site",
+            "english": "Poor Illumination",
+            "mapped": "조도불량"
+        },
+        "줄눈탈락": {
+            "description": "The grout material between tiles is cracking, crumbling, or falling out.",
+            "english": "Grout Loss",
+            "mapped": "줄눈탈락"
+        },
+        "지하수용출": {
+            "description": "A defect where water from the ground penetrates into a building, typically through the basement or lower levels",
+            "english": "Groundwater seepage",
+            "mapped": "지하수용출"
+        },
+        "찢김": {
+            "description": "A type of defect characterized by a long, narrow opening or breakage in a material or structure",
+            "english": "Tear",
+            "mapped": "찢김"
+        },
+        "철거": {
+            "description": "Not typically classified as a defect, but rather a method of repair work involving the removal of existing structures or finishes.",
+            "english": "Demolition / Removal",
+            "mapped": "철거"
+        },
+        "충압불량": {
+            "description": "A construction defect where soil or other materials are not densely packed, potentially leading to structural instability",
+            "english": "Poor Compaction",
+            "mapped": "충압불량"
+        },
+        "침수": {
+            "description": "An issue where water infiltrates or overflows into a building or area",
+            "english": "Flooding",
+            "mapped": "침수"
+        },
+        "침하": {
+            "description": "A defect where a building's foundation sinks due to soil compression or other underlying issues",
+            "english": "Settlement",
+            "mapped": "침하"
+        },
+        "커버불량": {
+            "description": "A problem related to the protective or decorative layer of a structure or material",
+            "english": "Cover Defect",
+            "mapped": "커버불량"
+        },
+        "코킹불량": {
+            "description": "The sealant (caulking/silicone) applied around window frames, bathtubs, or sinks to block moisture and air is peeling, cracked, or missing.",
+            "english": "Poor Caulking",
+            "mapped": "코킹불량"
+        },
+        "콘크리트균열": {
+            "description": "A type of defect where visible fractures or lines appear on the surface of concrete structures",
+            "english": "Concrete Cracking",
+            "mapped": "콘크리트균열"
+        },
+        "콘크리트면배수불량": {
+            "description": "A defect where the concrete surface is not properly sloped or designed to allow water to drain off, leading to potential water damage or structural issues.",
+            "english": "Concrete Surface Drainage Deficiency",
+            "mapped": "콘크리트면배수불량"
+        },
+        "콘크리트철근노출": {
+            "description": "A defect where the reinforcing steel within concrete becomes visible due to deterioration or damage",
+            "english": "Concrete Reinforcement Exposure",
+            "mapped": "콘크리트철근노출"
+        },
+        "쿠킹불량": {
+            "description": "A defect referring to improperly applied or deteriorated sealant in joints or seams in building structures",
+            "english": "Poor caulking",
+            "mapped": "쿠킹불량"
+        },
+        "타일불량": {
+            "description": "A problem or issue related to the quality, installation, or condition of tiles",
+            "english": "Tile Defect",
+            "mapped": "타일불량"
+        },
+        "타일파손": {
+            "description": "A defect or issue related to the breakage, chipping, or cracking of tiles in a building or house",
+            "english": "Tile Damage",
+            "mapped": "타일파손"
+        },
+        "탈락": {
+            "description": "A defect where a layer or coating detaches from the surface of a building material",
+            "english": "Peeling",
+            "mapped": "탈락"
+        },
+        "탈부착/교체": {
+            "description": "A type of defect or issue where a part of the building or house needs to be detached and replaced",
+            "english": "Detachment/Replacement",
+            "mapped": "탈부착/교체"
+        },
+        "터치불량": {
+            "description": "A touch screen device, such as a wall pad or smart switch, does not respond to touch.",
+            "english": "Touch Screen Failure",
+            "mapped": "터치불량"
+        },
+        "토사유실": {
+            "description": "A type of defect where soil is eroded or washed away, often leading to structural instability",
+            "english": "Soil loss",
+            "mapped": "토사유실"
+        },
+        "통신불량": {
+            "description": "A defect or issue related to the malfunctioning of communication systems within a building or house",
+            "english": "Communication Failure",
+            "mapped": "통신불량"
+        },
+        "통행방해": {
+            "description": "A defect or issue where a pathway or route is blocked or hindered in a building or construction site",
+            "english": "Obstruction of passage",
+            "mapped": "통행방해"
+        },
+        "파손": {
+            "description": "A material is broken or shattered due to external impact, losing its original function.",
+            "english": "Damage / Breakage",
+            "mapped": "파손"
+        },
+        "포장불량": {
+            "description": "A defect or issue related to improper or inadequate packaging of construction materials",
+            "english": "Poor Packaging",
+            "mapped": "포장불량"
+        },
+        "표면요철": {
+            "description": "A defect characterized by a wavy, ridged, or furrowed surface on materials such as concrete, metal, or wood",
+            "english": "Surface corrugation",
+            "mapped": "표면요철"
+        },
+        "함몰": {
+            "description": "A part of a surface, such as a floor or wall, is dented or has sunk inward.",
+            "english": "Sinking / Indentation",
+            "mapped": "함몰"
+        },
+        "화재/침수": {
+            "description": "Types of defects/issues related to damage caused by fire or water intrusion",
+            "english": "Fire/Flooding",
+            "mapped": "화재/침수"
+        },
+        "흠집": {
+            "description": "A general term for marks or damage on a surface, including nicks, dents, and scratches.",
+            "english": "Scratch / Nick / Dent",
+            "mapped": "흠집"
+        }
+    }
+}

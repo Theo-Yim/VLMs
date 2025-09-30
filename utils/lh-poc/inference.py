@@ -24,6 +24,8 @@ from qwen_vl_utils import process_vision_info
 from google import genai
 from google.genai import types
 
+GLOBAL_GROUND_TRUTH_MAPPING = json.load(open("ground_truth_mapping.json"))
+
 def evaluate_image_with_openai(image_url, api_key="EMPTY", api_base="http://localhost:8000/v1", model="Qwen/Qwen2.5-VL-7B-Instruct", text_query="What is the text in the illustrate?"):
     # Set OpenAI's API key and API base to use vLLM's API server.
     if api_base is None:
@@ -188,26 +190,41 @@ def process_batch(gpu_id, data_items, args):
     model = None
     
     # Load model for this GPU if using local mode
+    # 이미지 파일: /mnt/nas2/users/sbchoi/kh-practices/lh-poc/lh-data-image-train/9dcec10d-6a98-44c5-9637-14e81e6c100f.jpg
+    # 라벨 ID: 9dcec10d-6a98-44c5-9637-14e81e6c100f
+    # 라벨 파일: /mnt/nas2/users/sbchoi/kh-practices/lh-poc/lh-data-annotation-train/9dcec10d-6a98-44c5-9637-14e81e6c100f.json
+    # 라벨 데이터: {'id': 'e3bdbf75-62ae-4a56-a7d7-67a2f61f6c39', 
+    # 'class_name': '하자', 
+    # 'annotation': {'coord': {'x': 373.1791556889897, 'y': 0, 'width': 679.7377611665953, 'height': 1075}, 
+    # 'meta': {'z_index': 1, 'visible': True, 'alpha': 1, 'color': '#FF625A'}}, 
+    # 'annotation_type': 'box', 'properties': [], 
+    # 'metadata': {'하자진행상태': ['공사완료'], '공간': '주방', '부위자재': '천장', '하자구분': '유지보수', '하자유형': '누수', '하자내용': '108동 1204호 주방 침실2 천장 벽면 누수 보수공사 요청', '공종': '기계', '공사유형': '난방배관공사'}, 
+    # 'tags': ['누수', '0915_확인중', '3rd_data', 'train_dataset']}
     for item in tqdm(data_items, desc=f"GPU {gpu_id}"):
         image_file = item['image_file']
         label_id = item['label_id']
         properties = item['annotation_data']['metadata']
         unpredictable = "NO(이미지 판단 불가)" in set(item['annotation_data']['tags'])
-        print(unpredictable, item['annotation_data']['tags'])
         if unpredictable:
-            defect_present = "Unpredictable"
+            defect_present = "Unknown"
         else:
             defect_present = "Yes"
-        space = properties['공간']
-        material_part = properties['부위자재']
-        defect_type = properties['하자유형']
-        defect_content = properties['하자내용']
-        label = f"space: {space}\ndefect_present: {defect_present}\nmaterial_part: {material_part}\ndefect_type: {defect_type}\ndefect_content: {defect_content}"
+        space = properties['공간'] if '공간' in properties else ""
+        space_list = "\n".join([i['english'] for i in GLOBAL_GROUND_TRUTH_MAPPING['공간'].values()])
+        material_part = properties['부위자재'] if '부위자재' in properties else ""
+        material_part_list = "\n".join([i['english'] for i in GLOBAL_GROUND_TRUTH_MAPPING['부위자재'].values()])
+        defect_type = properties['하자유형'] if '하자유형' in properties else ""
+        defect_type_list = "\n".join([f"{i['english']}: {i['description']}" for i in GLOBAL_GROUND_TRUTH_MAPPING['하자유형'].values()])
+        construction_type = properties['공종'] if '공종' in properties else ""
+        construction_type_list = "\n".join([i['english'] for i in GLOBAL_GROUND_TRUTH_MAPPING['공종'].values()])
+        detail_construction_type = properties['보수공사명'] if '보수공사명' in properties else ""
+        detail_construction_type_list = "\n".join([i['english'] for i in GLOBAL_GROUND_TRUTH_MAPPING['보수공사명'].values()])
+        defect_message = properties['하자내용']
 
         if purpose == "test":
-            prompt = ENGLISH_INFERENCE_PROMPT
+            prompt = ENGLISH_INFERENCE_PROMPT.format(spaces=space_list, material_parts=material_part_list, defect_types=defect_type_list, construction_types=construction_type_list, detail_construction_types=detail_construction_type_list, defect_message=defect_message)
         else:
-            prompt = f"### Existing Label:\n{label}" + ENGLISH_TRAIN_PROMPT
+            prompt = ENGLISH_TRAIN_PROMPT
 
         result_path = os.path.join(result_dir, f"{label_id}.txt")
         
@@ -348,12 +365,17 @@ def save_ovis_format(result_dir, data_items, data_root):
 
 """
 python inference.py --mode local --name OpenGVLab/InternVL3_5-8B --purpose train --rerun --debug
-python inference.py --mode local--name OpenGVLab/InternVL3_5-1B --purpose test --rerun
-python inference.py --mode local --name Qwen/Qwen2.5-VL-3B-Instruct --purpose test --rerun
-python inference.py --mode local --name AIDC-AI/Ovis2.5-1B --purpose test --rerun
-python inference.py --mode local --name AIDC-AI/Ovis2.5-9B --purpose test --rerun
+python inference.py --mode local --name OpenGVLab/InternVL3_5-8B --purpose test --rerun --debug
+python inference.py --mode local --name OpenGVLab/InternVL3_5-4B --purpose test --rerun --debug
+python inference.py --mode local --name OpenGVLab/InternVL3_5-2B --purpose test --rerun --debug
+python inference.py --mode local --name OpenGVLab/InternVL3_5-1B --purpose test --rerun --debug
+python inference.py --mode local --name Qwen/Qwen2.5-VL-3B-Instruct --purpose test --rerun --debug
+python inference.py --mode local --name Qwen/Qwen2.5-VL-7B-Instruct --purpose test --rerun --debug
+python inference.py --mode local --name AIDC-AI/Ovis2.5-2B --purpose test --rerun --debug
+python inference.py --mode local --name AIDC-AI/Ovis2.5-9B --purpose test --rerun --debug
+python inference.py --mode local --name Superb-AI/Ovis2.5-9B-v1 --purpose test --rerun
+python inference.py --mode local --name Superb-AI/Ovis2.5-9B-v2.1 --purpose test --rerun
 python inference.py --mode vllm --name hyperclova/HCX-005 --purpose test --rerun --debug
-python inference.py --mode vllm --name Qwen/Qwen2.5-VL-7B-Instruct --purpose train --rerun --debug
 python inference.py --mode vllm --name openai/gpt-5 --purpose test --rerun
 python inference.py --mode vllm --name google/gemini-2.5-flash --purpose test --rerun --debug
 """

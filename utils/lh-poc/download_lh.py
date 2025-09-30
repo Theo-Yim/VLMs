@@ -3,9 +3,16 @@ from spb_label.utils import SearchFilter, retrieve_file
 import os
 import json
 from tqdm import tqdm
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--type", type=str, default="train")
+args = parser.parse_args()
 
 rerun = True
-type = "train"
+type = args.type
+# image_dir = f"/mnt/nas2/users/sbchoi/kh-practices/lh-poc/lh-data-image-{type}/"
+# annotation_dir = f"/mnt/nas2/users/sbchoi/kh-practices/lh-poc/lh-data-annotation-{type}/"
 image_dir = f"/workspace/data/lh-poc/lh-data-image-{type}/"
 annotation_dir = f"/workspace/data/lh-poc/lh-data-annotation-{type}/"
 os.makedirs(image_dir, exist_ok=True)

@@ -122,10 +122,30 @@ class LHDataLoader:
         
         return stats
 
+    def get_ground_truth(self) -> Dict:
+        """데이터셋 그라운드 트루 정보 반환"""
+        ground_truth = {}
+        for idx, item in enumerate(self.data_index):
+            item = self.__getitem__(idx)            
+            metadata = item['annotation_data']['metadata']
+            for key, value in metadata.items():
+                if key == 'tags' or key =='하자내용':
+                    continue
+                if key not in ground_truth:
+                    ground_truth[key] = set()
+                if isinstance(value, list):
+                    for v in value:
+                        ground_truth[key].add(v)
+                else:
+                    ground_truth[key].add(value)
+        for key, value in ground_truth.items():
+            ground_truth[key] = {v:v for v in value}
+        return ground_truth
+
 def main():
     """사용 예시"""
     # 데이터 경로 설정
-    data_root = "/mnt/nas1/data/lh-poc"
+    data_root = "/mnt/nas2/users/sbchoi/kh-practices/lh-poc/"
     
     # 데이터로더 생성
     loader = LHDataLoader(data_root, type="train")
@@ -146,7 +166,7 @@ def main():
             print(f"라벨 파일: {item['annotation_file']}")
             print(f"라벨 데이터: {item['annotation_data']}")
             index += 1
-            if index > 10:
+            if index > 1:
                 break
     
     # 특정 라벨 ID로 검색 예시
@@ -158,6 +178,16 @@ def main():
             item = loader.get_by_label_id(sample_label_id)
             if item:
                 print(f"라벨 ID {sample_label_id}의 이미지: {item['image_file']}")
+
+    ground_truth = loader.get_ground_truth()
+    print("\n=== 그라운드 트루 정보 ===")
+    for key, value in ground_truth.items():
+        print(f"{key}: {value}")
+
+    if not os.path.exists("ground_truth_mapping.json"):
+        json.dump(ground_truth, open("ground_truth_mapping.json", "w"), ensure_ascii=False, indent=4)
+    else:
+        print("ground_truth_mapping.json already exists, are you sure you want to overwrite it?")
 
 if __name__ == "__main__":
     main()

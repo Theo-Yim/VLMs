@@ -10,8 +10,9 @@ import os
 
 import torch
 from dataloader import LHDataLoader
-from prompt_theo import defect_types, material_parts, spaces, R1_SYSTEM_PROMPT, prompt_theo_sync_w_R1
+from name import DEFECT_CLASS, MATERIAL_CLASS, SPACE_CLASS
 from prompt_sb import ENGLISH_TRAIN_PROMPT
+from prompt_theo import defect_types, material_parts, prompt_theo_v2, prompt_theo_v2_system, spaces
 from tqdm import tqdm
 
 from InternVL3.utils.preprocess import load_image
@@ -23,39 +24,25 @@ def extract_label_information(annotation_data):
     Extract information dictionary from label data
     Same logic as mentioned by the user
     """
+
+    is_no_defect = any(
+        "하자유형_check" in tag or "NO(이미지 판단 불가)" in tag for tag in annotation_data["tags"]
+    )
+    properties = annotation_data["metadata"]  # categories.get("properties", [])
     information = {}
-    target_dict = {
-        "공간": "space",
-        "부위자재": "material_parts",
-        "하자유형": "defect_types",
-        "하자내용": "defect_description",
-    }
-
-    # Optimized: Use any() with generator expression for early exit
-    # if "하자유형_check" or "NO(이미지 판단 불가)" in any tag in annotation_data["tags"], then is_no_defect is True
-    is_no_defect = any("하자유형_check" in tag or "NO(이미지 판단 불가)" in tag for tag in annotation_data["tags"])
-    # is_no_defect = any("NO(이미지 판단 불가)" in tag for tag in annotation_data["tags"])
-
-    # Optimized: Cache label_data access and use more efficient property processing
-    # label_data = annotation_data.get("label_data", {})
-    # categories = label_data.get("categories", {})
-    properties =  annotation_data['metadata']  # categories.get("properties", [])
-
-    # # Optimized: Use dict comprehension for better performance
-    # property_mapping = {
-    #     prop["property_name"]: prop.get("value") or prop.get("option_names")
-    #     for prop in properties
-    #     if "property_name" in prop and prop["property_name"] in target_dict
-    # }
-    # Map properties to information dict
-    for korean_name, english_name in target_dict.items():
-        if korean_name in properties:
-            information[english_name] = properties[korean_name]
+    if "공간" in properties and properties["공간"] in SPACE_CLASS:
+        information["space"] = SPACE_CLASS[properties["공간"]]
+    if "부위자재" in properties and properties["부위자재"] in MATERIAL_CLASS:
+        information["material_parts"] = MATERIAL_CLASS[properties["부위자재"]]
+    if "하자유형" in properties and properties["하자유형"] in DEFECT_CLASS:
+        information["defect_types"] = DEFECT_CLASS[properties["하자유형"]]
+    if "하자내용" in properties:
+        information["defect_description"] = properties["하자내용"]
 
     if is_no_defect:
         information["defect_present"] = "Unknown"
         information["defect_type"] = "None"
-        information["defect_description"] = "None"
+        # information["defect_description"] = "None"
     else:
         information["defect_present"] = "Yes"
     return str(information)
@@ -78,12 +65,6 @@ def main():
         default="train",
         help="Type of data to process",
     )
-    # parser.add_argument(
-    #     "--image_root",
-    #     type=str,
-    #     default="/mnt/nas1/data/lh-poc/lh-data-image/image/20250722",
-    #     help="Path to image root",
-    # )
     parser.add_argument(
         "--result_dir",
         type=str,
@@ -105,15 +86,22 @@ def main():
         "--single_image", type=str, default=None, help="Path to single image for testing"
     )
     parser.add_argument("--limit", type=int, default=None, help="Limit number of images to process")
-    parser.add_argument("--gpu_id", type=int, default=5, help="GPU ID to use for this process. -1 for distributing all GPUs")
+    parser.add_argument(
+        "--gpu_id",
+        type=int,
+        default=0,
+        help="GPU ID to use for this process. -1 for distributing all GPUs",
+    )
     args = parser.parse_args()
 
     # Create result directory
     os.makedirs(args.result_dir, exist_ok=True)
 
-    model, tokenizer = load_models(args.model_path, device_map=f"cuda:{args.gpu_id}" if args.gpu_id != -1 else None)
+    model, tokenizer = load_models(
+        args.model_path, device_map=f"cuda:{args.gpu_id}" if args.gpu_id != -1 else None
+    )
     if args.enable_thinking:
-        model.system_message = R1_SYSTEM_PROMPT
+        model.system_message = prompt_theo_v2_system
 
     # Load dataset
     print("Loading data...")
@@ -127,7 +115,6 @@ def main():
     processed_count = 0
     error_count = 0
     for idx, item in enumerate(tqdm(loader, desc="Processing images")):
-
         # Get metadata
         data_key = item["label_id"]
         # label_id = item["label_id"]
@@ -143,14 +130,18 @@ def main():
             print(f"Warning - Image not found: {image_path}")
             error_count += 1
             continue
-        pixels = load_image(image_path, max_num=12).to(torch.bfloat16).to(f"cuda:{args.gpu_id}" if args.gpu_id != -1 else "cuda:0")
+        pixels = (
+            load_image(image_path, max_num=12)
+            .to(torch.bfloat16)
+            .to(f"cuda:{args.gpu_id}" if args.gpu_id != -1 else "cuda:0")
+        )
 
         # Extract existing label information
         existing_labels = extract_label_information(item["annotation_data"])
 
         prompt_sb = False
         if not prompt_sb:
-            prompt_1 = prompt_theo_sync_w_R1.format(
+            prompt_1 = prompt_theo_v2.format(
                 spaces=spaces,
                 material_parts=material_parts,
                 defect_types=defect_types,
@@ -173,18 +164,26 @@ def main():
         with open(result_path, "w", encoding="utf-8") as f:
             f.write(response)
 
-        # if bbox is present, inference one more time with the bbox
-        # Load and preprocess image
-        if "annotation" in item["annotation_data"] and 'coord' in item["annotation_data"]["annotation"]:
-            bbox = item["annotation_data"]["annotation"]["coord"]
-            bbox = [bbox["x"], bbox["y"], bbox["x"] + bbox["width"], bbox["y"] + bbox["height"]]
-        else:
-            continue
-        pixels = load_image(image_path, max_num=12, bbox_xyxy=bbox).to(torch.bfloat16).to(f"cuda:{args.gpu_id}" if args.gpu_id != -1 else "cuda:0")
-        with torch.inference_mode():
-            response = model.chat(tokenizer, pixels, prompt_1, generation_config)
-        with open(result_path[:-4] + "_bbox.txt", "a", encoding="utf-8") as f:
-            f.write(response + "\n" + str(bbox))
+        if False:  # BBOX
+            # if bbox is present, inference one more time with the bbox
+            # Load and preprocess image
+            if (
+                "annotation" in item["annotation_data"]
+                and "coord" in item["annotation_data"]["annotation"]
+            ):
+                bbox = item["annotation_data"]["annotation"]["coord"]
+                bbox = [bbox["x"], bbox["y"], bbox["x"] + bbox["width"], bbox["y"] + bbox["height"]]
+            else:
+                continue
+            pixels = (
+                load_image(image_path, max_num=12, bbox_xyxy=bbox)
+                .to(torch.bfloat16)
+                .to(f"cuda:{args.gpu_id}" if args.gpu_id != -1 else "cuda:0")
+            )
+            with torch.inference_mode():
+                response = model.chat(tokenizer, pixels, prompt_1, generation_config)
+            with open(result_path[:-4] + "_bbox.txt", "a", encoding="utf-8") as f:
+                f.write(response + "\n" + str(bbox))
 
         processed_count += 1
         if args.limit and processed_count >= args.limit:
