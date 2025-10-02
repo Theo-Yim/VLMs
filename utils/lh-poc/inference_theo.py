@@ -10,8 +10,9 @@ import os
 
 import torch
 from dataloader import LHDataLoader
+from dataloader_pytorch_lh import create_dataloader
 from name import DEFECT_CLASS, MATERIAL_CLASS, SPACE_CLASS
-from prompt_sb import ENGLISH_TRAIN_PROMPT
+from prompt_sb_v2 import ENGLISH_TRAIN_PROMPT, R1_SYSTEM_PROMPT
 from prompt_theo import defect_types, material_parts, prompt_theo_v2, prompt_theo_v2_system, spaces
 from tqdm import tqdm
 
@@ -78,7 +79,7 @@ def main():
         "--enable_thinking", action="store_true", help="Enable thinking mode with R1 system prompt"
     )
     parser.add_argument(
-        "--max_new_tokens", type=int, default=4096, help="Maximum number of new tokens to generate"
+        "--max_new_tokens", type=int, default=3072, help="Maximum number of new tokens to generate"
     )
     parser.add_argument("--temperature", type=float, default=0.6, help="Sampling temperature")
     parser.add_argument("--rerun", action="store_true", help="Rerun inference for existing results")
@@ -91,6 +92,12 @@ def main():
         type=int,
         default=0,
         help="GPU ID to use for this process. -1 for distributing all GPUs",
+    )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=4,
+        help="Number of worker processes for data loading",
     )
     args = parser.parse_args()
 
@@ -105,16 +112,23 @@ def main():
 
     # Load dataset
     print("Loading data...")
-    loader = LHDataLoader(args.data_root, type=args.data_type)
+    base_loader = LHDataLoader(args.data_root, type=args.data_type)
 
-    print(f"Total items to process: {len(loader)}")
+    # Create PyTorch DataLoader with multiprocessing workers
+    device = f"cuda:{args.gpu_id}" if args.gpu_id != -1 else "cuda:0"
+    loader = create_dataloader(base_loader, device=device, max_num=12, num_workers=args.num_workers)
+
+    print(f"Total items to process: {len(base_loader)}")
     # Apply limit if specified
     if args.limit:
         print(f"Limited to first {args.limit} items")
 
     processed_count = 0
     error_count = 0
-    for idx, item in enumerate(tqdm(loader, desc="Processing images")):
+    for batch in tqdm(loader, desc="Processing images", total=len(base_loader)):
+        item = batch[0]  # Batch size is 1
+        idx = item.get("index", 0)  # Get index from item
+
         # Get metadata
         data_key = item["label_id"]
         # label_id = item["label_id"]
@@ -124,17 +138,14 @@ def main():
         if os.path.exists(result_path) and not args.rerun:
             continue
 
-        # Get image path
-        image_path = os.path.join(loader.image_path, data_key + ".jpg")
-        if not os.path.exists(image_path):
-            print(f"Warning - Image not found: {image_path}")
+        # Check for loading errors
+        if item.get("error"):
+            print(f"Warning - Error loading image: {item['error']}")
             error_count += 1
             continue
-        pixels = (
-            load_image(image_path, max_num=12)
-            .to(torch.bfloat16)
-            .to(f"cuda:{args.gpu_id}" if args.gpu_id != -1 else "cuda:0")
-        )
+
+        # Get prefetched pixels and move to GPU
+        pixels = item["pixels"].to(device)
 
         # Extract existing label information
         existing_labels = extract_label_information(item["annotation_data"])
@@ -148,6 +159,7 @@ def main():
                 existing_labels=existing_labels,
             )
         else:
+            model.system_message = R1_SYSTEM_PROMPT
             prompt_1 = f"### Existing Label:\n{existing_labels}" + ENGLISH_TRAIN_PROMPT
 
         print(f"\nProcessing {idx + 1}/{len(loader)}: {data_key}")
@@ -164,35 +176,35 @@ def main():
         with open(result_path, "w", encoding="utf-8") as f:
             f.write(response)
 
-        if False:  # BBOX
-            # if bbox is present, inference one more time with the bbox
-            # Load and preprocess image
-            if (
-                "annotation" in item["annotation_data"]
-                and "coord" in item["annotation_data"]["annotation"]
-            ):
-                bbox = item["annotation_data"]["annotation"]["coord"]
-                bbox = [bbox["x"], bbox["y"], bbox["x"] + bbox["width"], bbox["y"] + bbox["height"]]
-            else:
-                continue
-            pixels = (
-                load_image(image_path, max_num=12, bbox_xyxy=bbox)
-                .to(torch.bfloat16)
-                .to(f"cuda:{args.gpu_id}" if args.gpu_id != -1 else "cuda:0")
-            )
-            with torch.inference_mode():
-                response = model.chat(tokenizer, pixels, prompt_1, generation_config)
-            with open(result_path[:-4] + "_bbox.txt", "a", encoding="utf-8") as f:
-                f.write(response + "\n" + str(bbox))
+        # if False:  # BBOX
+        #     # if bbox is present, inference one more time with the bbox
+        #     # Load and preprocess image
+        #     if (
+        #         "annotation" in item["annotation_data"]
+        #         and "coord" in item["annotation_data"]["annotation"]
+        #     ):
+        #         bbox = item["annotation_data"]["annotation"]["coord"]
+        #         bbox = [bbox["x"], bbox["y"], bbox["x"] + bbox["width"], bbox["y"] + bbox["height"]]
+        #     else:
+        #         continue
+        #     pixels = (
+        #         load_image(image_path, max_num=12, bbox_xyxy=bbox)
+        #         .to(torch.bfloat16)
+        #         .to(f"cuda:{args.gpu_id}" if args.gpu_id != -1 else "cuda:0")
+        #     )
+        #     with torch.inference_mode():
+        #         response = model.chat(tokenizer, pixels, prompt_1, generation_config)
+        #     with open(result_path[:-4] + "_bbox.txt", "a", encoding="utf-8") as f:
+        #         f.write(response + "\n" + str(bbox))
 
         processed_count += 1
         if args.limit and processed_count >= args.limit:
             break
 
-        # Clean up GPU memory
-        del pixels
-        torch.cuda.empty_cache()
-        gc.collect()
+        # # Clean up GPU memory
+        # del pixels
+        # torch.cuda.empty_cache()
+        # gc.collect()
 
     print(f"\nProcessed {processed_count} images")
     print(f"\nEncountered {error_count} errors")

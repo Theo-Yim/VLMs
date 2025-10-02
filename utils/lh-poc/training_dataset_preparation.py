@@ -49,12 +49,13 @@ def refine_content(content, img_name):
     answer, bbox = answer.split("</A>")[0].strip(), answer.split("</A>")[1].strip()
     bbox = None if len(bbox) < 12 else bbox
     # answer = answer[answer.find("[")+1:answer.find("]")]
-    answer = answer[answer.find("["):answer.rfind("]")+1]
+    answer = answer[answer.find("{"):answer.rfind("}")+1]
     answer = answer.strip()
     answer = json.loads(answer)
-    if len(answer) > 1:
-        print(f" - Data Key: {img_name} has {len(answer)} defects. Using the first one only.")
-        answer = answer[0]
+    assert len(answer) < 8 and len(answer) > 1, f" - Data Key: {img_name} has {len(answer)} defects. {answer}"
+    # if len(answer) > 1:
+    #     print(f" - Data Key: {img_name} has {len(answer)} defects. Using the first one only.")
+    #     answer = answer[0]
 
     content = content[:content.find("<A>")].strip() + "\n" + json.dumps(answer, indent=1)
 
@@ -70,7 +71,7 @@ if __name__ == "__main__":
     data_root = "/home/Theo-Yim/data/lh-poc/" # "/mnt/nas1/data/lh-poc/"
     # image_root = "/mnt/nas1/data/lh-poc/lh-data-image/image/20250722"
 
-    output_path = "/workspace/VLMs/utils/lh-poc/training_dataset.json"
+    output_path = "/workspace/VLMs/utils/lh-poc/dataset_lh_train_theo.json"
     output_list = []
 
     # Load dataset
@@ -86,14 +87,18 @@ if __name__ == "__main__":
 
         img_name = label_id + ".jpg"
 
-        base_path = "/workspace/VLMs/utils/lh-poc/results_theo_parallel"
+        base_path = "/workspace/VLMs/utils/lh-poc/results_theo_parallel_v2"
         found_files = find_label_files(base_path, label_id)
         if len(found_files) == 0:
             print(f"No found files for label_id: {label_id}")
             continue
         with open(found_files[0], "r") as f:
             content = f.read()
-        content, _ = refine_content(content, img_name)
+        try:
+            content, _ = refine_content(content, img_name)
+        except Exception as e:
+            print(f"{found_files}, Error: {e}")
+            continue
 
         # for file_path in found_files:
         #     print(f"Found: {file_path}")

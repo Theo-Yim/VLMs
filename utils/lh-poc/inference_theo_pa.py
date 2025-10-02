@@ -9,11 +9,13 @@ import argparse
 import gc
 import json
 import os
+import sys
 
 import torch
 from dataloader import LHDataLoader
+from dataloader_pytorch_lh import create_dataloader
 from name import DEFECT_CLASS, MATERIAL_CLASS, SPACE_CLASS
-from prompt_sb import ENGLISH_TRAIN_PROMPT
+from prompt_sb_v2 import ENGLISH_TRAIN_PROMPT, R1_SYSTEM_PROMPT
 from prompt_theo import defect_types, material_parts, prompt_theo_v2, prompt_theo_v2_system, spaces
 from tqdm import tqdm
 
@@ -80,7 +82,7 @@ def main():
         "--enable_thinking", action="store_true", help="Enable thinking mode with R1 system prompt"
     )
     parser.add_argument(
-        "--max_new_tokens", type=int, default=4096, help="Maximum number of new tokens to generate"
+        "--max_new_tokens", type=int, default=3072, help="Maximum number of new tokens to generate"
     )
     parser.add_argument("--temperature", type=float, default=0.6, help="Sampling temperature")
     parser.add_argument("--rerun", action="store_true", help="Rerun inference for existing results")
@@ -100,6 +102,12 @@ def main():
     parser.add_argument(
         "--process_id", type=int, default=0, help="Process ID for logging and unique identification"
     )
+    parser.add_argument(
+        "--num_workers",
+        type=int,
+        default=4,
+        help="Number of worker processes for data loading",
+    )
 
     args = parser.parse_args()
 
@@ -118,8 +126,8 @@ def main():
 
     # Load dataset
     print(f"Process {args.process_id}: Loading data...")
-    loader = LHDataLoader(args.data_root, type=args.data_type)
-    total_items = len(loader)
+    base_loader = LHDataLoader(args.data_root, type=args.data_type)
+    total_items = len(base_loader)
 
     # Calculate data slice for this process
     if args.end_idx is None:
@@ -146,14 +154,31 @@ def main():
         process_items = args.limit
         print(f"Process {args.process_id}: Limited to {process_items} items")
 
+    # Create PyTorch DataLoader with multiprocessing workers for this slice
+    device = "cuda:0"  # Always 0 since we set CUDA_VISIBLE_DEVICES
+    loader = create_dataloader(
+        base_loader,
+        device=device,
+        max_num=12,
+        num_workers=args.num_workers,
+        start_idx=args.start_idx,
+        end_idx=args.end_idx,
+    )
+
     processed_count = 0
     error_count = 0
-    for idx in tqdm(
-        range(args.start_idx, args.end_idx),
+
+    # Disable tqdm position when output is redirected to avoid ANSI escape codes
+    use_position = sys.stdout.isatty()
+
+    for batch in tqdm(
+        loader,
         desc=f"Process {args.process_id}",
-        position=args.process_id,
+        position=args.process_id if use_position else None,
+        total=process_items,
     ):
-        item = loader[idx]
+        item = batch[0]  # Batch size is 1
+        idx = item["index"]
 
         # Get metadata
         data_key = item["label_id"]
@@ -164,14 +189,14 @@ def main():
         if os.path.exists(result_path) and not args.rerun:
             continue
 
-        # Get image path
-        image_path = os.path.join(loader.image_path, data_key + ".jpg")
-        if not os.path.exists(image_path):
-            print(f"Process {args.process_id}: Warning - Image not found: {image_path}")
+        # Check for loading errors
+        if item.get("error"):
+            print(f"Process {args.process_id}: Warning - Error loading image: {item['error']}")
             error_count += 1
             continue
 
-        pixels = load_image(image_path, max_num=12).to(torch.bfloat16).cuda()
+        # Get prefetched pixels and move to GPU
+        pixels = item["pixels"].to(device)
 
         # Extract existing label information
         existing_labels = extract_label_information(item["annotation_data"])
@@ -185,6 +210,7 @@ def main():
                 existing_labels=existing_labels,
             )
         else:
+            model.system_message = R1_SYSTEM_PROMPT
             prompt_1 = f"### Existing Label:\n{existing_labels}" + ENGLISH_TRAIN_PROMPT
 
         if (idx - args.start_idx) % 10 == 0:  # Print every 10th item
@@ -202,29 +228,31 @@ def main():
         with open(result_path, "w", encoding="utf-8") as f:
             f.write(response)
 
-        if False:  # BBOX
-            # if bbox is present, inference one more time with the bbox
-            # Load and preprocess image
-            if (
-                "annotation" in item["annotation_data"]
-                and "coord" in item["annotation_data"]["annotation"]
-            ):
-                bbox = item["annotation_data"]["annotation"]["coord"]
-                bbox = [bbox["x"], bbox["y"], bbox["x"] + bbox["width"], bbox["y"] + bbox["height"]]
-            else:
-                continue
-            pixels = load_image(image_path, max_num=12, bbox_xyxy=bbox).to(torch.bfloat16).cuda()
-            with torch.inference_mode():
-                response = model.chat(tokenizer, pixels, prompt_1, generation_config)
-            with open(result_path[:-4] + "_bbox.txt", "a", encoding="utf-8") as f:
-                f.write(response + "\n" + str(bbox))
+        # if False:  # BBOX
+        #     # if bbox is present, inference one more time with the bbox
+        #     # Load and preprocess image
+        #     if (
+        #         "annotation" in item["annotation_data"]
+        #         and "coord" in item["annotation_data"]["annotation"]
+        #     ):
+        #         bbox = item["annotation_data"]["annotation"]["coord"]
+        #         bbox = [bbox["x"], bbox["y"], bbox["x"] + bbox["width"], bbox["y"] + bbox["height"]]
+        #     else:
+        #         continue
+        #     pixels = (
+        #         load_image(item["image_file"], max_num=12, bbox_xyxy=bbox).to(torch.bfloat16).cuda()
+        #     )
+        #     with torch.inference_mode():
+        #         response = model.chat(tokenizer, pixels, prompt_1, generation_config)
+        #     with open(result_path[:-4] + "_bbox.txt", "a", encoding="utf-8") as f:
+        #         f.write(response + "\n" + str(bbox))
 
         processed_count += 1
 
-        # Clean up GPU memory
-        del pixels
-        torch.cuda.empty_cache()
-        gc.collect()
+        # # Clean up GPU memory
+        # del pixels
+        # torch.cuda.empty_cache()
+        # gc.collect()
 
     print(f"Process {args.process_id}: Processed {processed_count} images successfully")
     print(f"Process {args.process_id}: Encountered {error_count} errors")
