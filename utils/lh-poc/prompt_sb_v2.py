@@ -25,12 +25,6 @@ defect message: {defect_message}
 
 ### List of defect types
 {defect_types}
-
-### List of construction types
-{construction_types}
-
-### List of detail construction types
-{detail_construction_types}
 """
 
 # ### Existing Label will be inserted in the prompt

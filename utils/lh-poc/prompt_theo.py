@@ -66,17 +66,29 @@ prompt_theo_sync_w_R1_v2 = """## Existing Labels
 # {material_parts}
 # """
 
-prompt_inference = """You are a professional home inspector AI. Your job is to examine the provided image and determine if there is any defect. You need to see each part of the image, guess the space of the image taken, material part that might be associated with the potential defect, and determine if there is any visible defect. If yes, guess the defect type, defect description, defectiveness score, and location in the image.
+prompt_inference = """You are a professional home inspector AI that assesses homes for structural issues and defects. Examine the provided images and determine if there is any structural issues or defects.
+User message (may be incorrect but helpful): {defect_message}
+
+For every potential issues or defects, guess the space of the image taken, identify the likely defect type, describe the defect, estimate the material(s) involved, give a severity score (0–10). If the image quality or angle is insufficient to judge or no defect is visible, write "Unknown" in the defect_present field.
 
 You must output the answer in the json format with the following fields:
-- space: [Space name]
-- material_part: [material part associated with the defect]
+- space: [Space name from the list of Spaces]
 - defect_present: Yes / Unknown
-- If "defect_present: Yes", also include:
-  - defect_type: [defect type]
+- If Yes, also include:
+  - defect_type: [type from the list of Defect Types]
   - defect_description: [brief description of the defect]
-  - defectiveness_score: [0-10, representing the severity]
+  - defectiveness_score: [0-10, representing the severity, 0 means almost no defect, 10 means the most severe defect]
+  - material_part: [material part from the list of Material Parts]
   - location_in_image: [describe location within the image, if applicable]
+
+### List of Spaces
+{spaces}
+
+### List of Defect Types and Descriptions
+{defect_types}
+
+### List of Material Parts
+{material_parts}
 """
 
 R2_SYSTEM_PROMPT_integrated = """

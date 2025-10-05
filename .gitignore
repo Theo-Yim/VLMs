@@ -1,4 +1,5 @@
 data_tmp/
+InternVL3/checkpoints/
 InternVL3/samples/
 .vscode/
 *.pkl

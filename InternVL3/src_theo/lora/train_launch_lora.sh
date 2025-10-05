@@ -6,14 +6,14 @@
 set -e
 
 # Configuration
-export CUDA_VISIBLE_DEVICES=1,2  # Adjust based on your available GPUs
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7  # Adjust based on your available GPUs
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 export TOKENIZERS_PARALLELISM=false
 
 # Training parameters
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 # CONFIG_FILE="${SCRIPT_DIR}/train_config.json"
-CONFIG_FILE=${1:-"./InternVL3/src_theo/lora/train_config.json"}
+CONFIG_FILE=${1:-"./InternVL3/src_theo/lora/train_config_lora.json"}
 # TRAIN_SCRIPT="${SCRIPT_DIR}/train_theo_lora.py"
 TRAIN_SCRIPT="./InternVL3/src_theo/lora/train_theo_lora.py"
 
