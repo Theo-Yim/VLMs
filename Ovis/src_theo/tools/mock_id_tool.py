@@ -16,11 +16,21 @@ class IdentifyTool(ToolBase):
     """
 
     def __init__(self):
+        # Pattern for inference (no <tool_response> token)
         self.tool_call_pattern = r"<tool_call>Identify \[([0-9.,\s]+)\]</tool_call>"
 
-    def extract_tool_call(self, text: str) -> Dict[str, Any]:
-        """Optimized extraction for single tool call.
-        Returns parameters only since that's all we need now.
+        # Pattern for training detection (with <tool_response> token marker)
+        self.tool_call_with_response_pattern = r"<tool_call>Identify \[([0-9.,\s]+)\]</tool_call><tool_response>([^<]+)</tool_response>"
+
+    def extract_tool_call(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Extract single tool call for INFERENCE.
+
+        Used during real-time generation to detect tool calls.
+        Pattern: <tool_call>Identify [x1,y1,x2,y2]</tool_call> (NO <tool_response>)
+
+        Returns:
+            Tool call dict or None if not found
         """
         match = re.search(self.tool_call_pattern, text)
         if match:
@@ -29,15 +39,59 @@ class IdentifyTool(ToolBase):
             if len(coords) == 4:
                 return {
                     "parameters": [coords],
-                    "tool_name": "identify",  # Each tool manages its own name
-                    "tool_instance": self,  # Each tool manages its own instance
+                    "tool_name": "identify",
+                    "tool_instance": self,
                 }
-        return {}
+        return None
 
-    def execute(self, image: Optional[Image.Image], parameters: Any) -> Optional[dict]:
-        self.identify(image, parameters[0])
+    def extract_tool_calls(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Extract all tool calls for TRAINING DETECTION.
 
-    def identify(self, image: Image.Image, bbox: List[float]):
+        Detects pattern WITH <tool_response> for training data.
+
+        Returns:
+            List of tool call dicts with position info
+        """
+        tool_calls = []
+
+        # Pattern WITH </tool_call><tool_response>...</tool_response> (training format)
+        for match in re.finditer(self.tool_call_with_response_pattern, text):
+            coords_str = match.group(1)
+            coords = [float(x.strip()) for x in coords_str.split(",")]
+            if len(coords) == 4:
+                tool_calls.append(
+                    {
+                        "start_pos": match.start(),
+                        "end_pos": match.end(),
+                        "full_match": match.group(0),
+                        "parameters": [coords],
+                    }
+                )
+
+        return tool_calls
+
+    def execute(self, image: Optional[Image.Image], parameters: Any) -> Optional[Dict]:
+        """
+        Execute identify tool - used for BOTH inference and training.
+
+        Returns structured result based on whether image is available.
+        The return type determines how inference/training pipeline handles it:
+        - {"type": "text", "content": "name"} → wrapped in <tool_response>
+
+        Args:
+            image: PIL Image to identify from (None if unavailable)
+            parameters: [coords] from tool call
+
+        Returns:
+            {"type": "text", "content": identification_result}
+        """
+        if image is None:
+            return {"type": "text", "content": "Unable to identify - no image provided"}
+
+        return self.identify(image, parameters[0])
+
+    def identify(self, image: Image.Image, bbox: List[float]) -> Dict:
         """Execute identification operation"""
         coordinates = bbox
 
@@ -56,12 +110,10 @@ class IdentifyTool(ToolBase):
                 x2_px = min(x1_px + 10, width)
                 y2_px = min(y1_px + 10, height)
 
-            # Crop the image region
+            # Crop the image region for identification
             cropped_region = image.crop((x1_px, y1_px, x2_px, y2_px))
 
-            print(f"Identifying region: [{x1}, {y1}, {x2}, {y2}]")
-            print(f"Cropped region size: {cropped_region.size}")
-
-            return {"type": "text", "content": "This person's name is Theo"}
+            # Mock identification - in real scenario, this would call a recognition model
+            return {"type": "text", "content": "Theo"}
 
         return {"type": "text", "content": "Unable to identify - invalid coordinates"}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Standalone script to convert QnA format data to standard conversation format.
-Usage: python convert_data.py input.jsonl output.json [image_base_path]
+Usage: python convert_data.py input.jsonl output.json
 """
 
 import argparse
@@ -10,22 +10,28 @@ import re
 from typing import Any, Dict
 
 
+# System prompt for crop tool instructions
+SYSTEM_PROMPT = """You have access to a Crop tool for detailed visual analysis. When you need to examine a specific region of the image more closely, use the tool in this format: <tool_call>Crop [x, y, w, h]</tool_call>
+
+After each tool use, a cropped image will be provided for your closer inspection. Use this capability to provide detailed and accurate responses based on visual evidence."""
+
+
 def parse_and_replace_tool_calls(text: str) -> str:
     """
     Parse tool calls in the format {Crop person 1 [0.00, 141.43, 79.23, 480.00]}
-    and replace with <tool_call>Crop [0.00, 141.43, 79.23, 480.00]</tool_call>
+    and replace with <tool_call>Crop [0.00, 141.43, 79.23, 480.00]</tool_call><image>
 
     Example Usage:
     When a3_answer is "<think>Let me closely look at the person.\n\n{Crop person 2 [181, 16, 220, 191]}\n\nUpon closer inspection, the person is engaging with the camera.</think>\n\n<answer>The person is engaging with the camera.\n</answer>"
     a3_answer_processed = parse_and_replace_tool_calls(a3_answer)
-    a3_answer_processed is "<think>Let me closely look at the person.\n\n<tool_call>Crop [181, 16, 220, 191]</tool_call>\n\nUpon closer inspection, the person is engaging with the camera.</think>\n\n<answer>The person is engaging with the camera.\n</answer>"
+    a3_answer_processed is "<think>Let me closely look at the person.\n\n<tool_call>Crop [181, 16, 220, 191]</tool_call><image>\n\nUpon closer inspection, the person is engaging with the camera.</think>\n\n<answer>The person is engaging with the camera.\n</answer>"
     messages.append({"role": "assistant", "content": a3_answer_processed})
     """
     pattern = r"\{Crop[^}]*\[([\d.,\s]+)\]\}"
 
     def replace_func(match):
         coords = match.group(1)
-        return f"<tool_call>Crop [{coords}]</tool_call>"
+        return f"<tool_call>Crop [{coords}]</tool_call><image>"
 
     return re.sub(pattern, replace_func, text)
 
@@ -47,7 +53,7 @@ def has_tool_calls(text: str) -> bool:
 
 def process_qna_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Convert QnA format sample to standard conversation format
+    Convert QnA format sample to standard conversation format with system prompt
 
     Args:
         sample: QnA format sample with 'QnA' field
@@ -55,8 +61,12 @@ def process_qna_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Sample in standard conversation format
     """
+    # Add system prompt first
+    conversations = [
+        {"from": "system", "value": SYSTEM_PROMPT}
+    ]
+    
     # Convert QnA pairs to conversations
-    conversations = []
     for qa in sample.get("QnA", []):
         question = qa.get("Q", "")
         answer = qa.get("A3", qa.get("A", ""))
@@ -66,7 +76,7 @@ def process_qna_sample(sample: Dict[str, Any]) -> Dict[str, Any]:
 
         # Assistant message - process tool calls if present
         if answer and has_tool_calls(answer):
-            # Convert {Crop ...} to <tool_call>Crop ...</tool_call>
+            # Convert {Crop ...} to <tool_call>Crop ...</tool_call><image>
             processed_answer = parse_and_replace_tool_calls(answer)
             conversations.append({"from": "gpt", "value": processed_answer})
         else:

@@ -216,91 +216,89 @@ def chat_with_tool_execution(
                 latest_tool_start = response_text.rfind("<tool_call>")
                 assert latest_tool_start != -1, "Latest tool start not found"
 
-                # Extract just this single tool call using optimized detection
+                # Extract just this single tool call
                 tool_call_text = response_text[latest_tool_start:]
                 tool_call = tool_registry.detect_tool_call(tool_call_text)
                 assert tool_call, "Tool call just completed but none detected"
-                # Adjust position to match full text
-                tool_call["start_pos"] += latest_tool_start
-                tool_call["end_pos"] += latest_tool_start
 
                 tool_name = tool_call["tool_name"]
                 if _should_log_debug():
                     logger.debug(f"🔧 Detected {tool_name} tool call during generation")
 
-                # Execute the tool. Handle both image and text-only calls.
+                # Execute the tool
                 first_image = current_images[0] if current_images else None
                 tool_result = tool_registry.execute_tool_call(tool_call, first_image)
 
-                # Handle tool result - can be dict or None
+                # Handle tool result based on type
                 if tool_result is not None:
-                    # Handle structured tool results generically
                     if tool_result["type"] == "image":
-                        if current_images:  # Only append if we have image context
+                        # IMAGE TOOL: Add to context and rebuild
+                        if current_images:
                             current_images.append(tool_result["content"])
+
+                        # Rebuild context with new image
+                        content_parts = []
+                        if response_text.strip():
+                            content_parts.append({"type": "text", "text": response_text})
+
+                        if current_images:
+                            for img in current_images:
+                                content_parts.append({"type": "image", "image": img})
+
+                        if len(content_parts) > 1:
+                            assistant_partial = {"role": "assistant", "content": content_parts}
+                        else:
+                            assistant_partial = {"role": "assistant", "content": response_text}
+
+                        updated_messages = full_messages + [assistant_partial]
+
+                        # Reprocess inputs with tool results
+                        input_ids, pixel_values, grid_thws = model.preprocess_inputs(
+                            updated_messages,
+                            add_generation_prompt=False,
+                            enable_thinking=enable_thinking,
+                            min_pixels=min_pixels,
+                            max_pixels=max_pixels,
+                            **kwargs,
+                        )
+
+                        # Move to device
+                        input_ids = input_ids.to(device)
+                        if pixel_values is not None:
+                            pixel_values = pixel_values.to(device)
+                        if grid_thws is not None:
+                            grid_thws = grid_thws.to(device)
+
+                        if _should_log_debug():
+                            logger.debug("🔧 Resumed generation with image in context")
+
                     elif tool_result["type"] == "text":
-                        response_text += tool_result["content"]
-                    elif tool_result["type"] == "multimodal":
-                        # Handle mixed content
-                        for item in tool_result["content"]:
-                            if item["type"] == "text":
-                                response_text += item["text"]
-                            elif item["type"] == "image" and current_images:
-                                current_images.append(item["image"])
-                # If tool_result is None, nothing to append after tool call
+                        # TEXT TOOL: Insert <tool_response> and continue
+                        tool_response = f"<tool_response>{tool_result['content']}</tool_response>"
+                        response_text += tool_response
+
+                        # Encode the tool response text
+                        tool_response_tokens = model.text_tokenizer.encode(
+                            tool_response, add_special_tokens=False
+                        )
+                        tool_response_tensor = torch.tensor(
+                            tool_response_tokens, dtype=torch.long, device=device
+                        ).unsqueeze(0)
+
+                        # Update input_ids with both generated output and tool response
+                        input_ids = torch.cat([input_ids, tool_response_tensor], dim=-1)
+                        generation_kwargs["inputs"] = input_ids
+
+                        if _should_log_debug():
+                            logger.debug(f"🔧 Inserted text response: {tool_result['content']}")
 
                 executed_tools.append(tool_call)
                 processed_tool_calls += 1
-                if _should_log_debug():
-                    logger.debug(f"🔧 Executed {tool_name} tool")
 
-                # Rebuild context after processing the tool call
-                # Create assistant message with current response and images (if any)
-                content_parts = []
-
-                # Add text content
-                if response_text.strip():
-                    content_parts.append({"type": "text", "text": response_text})
-
-                # Add all images (original + tool results) - only if we have images
-                if current_images:
-                    for img in current_images:
-                        content_parts.append({"type": "image", "image": img})
-
-                # Create assistant partial - handle both multimodal and text-only cases
-                if len(content_parts) > 1:
-                    # Multimodal content (text + images)
-                    assistant_partial = {"role": "assistant", "content": content_parts}
-                else:
-                    # Text-only content
-                    assistant_partial = {"role": "assistant", "content": response_text}
-
-                # Rebuild messages with partial assistant response
-                updated_messages = full_messages + [assistant_partial]
-
-                # Reprocess inputs with tool results in context
-                input_ids, pixel_values, grid_thws = model.preprocess_inputs(
-                    updated_messages,
-                    add_generation_prompt=False,  # Don't add prompt since we're continuing
-                    enable_thinking=enable_thinking,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
-                    **kwargs,
-                )
-
-                # Move to device
-                input_ids = input_ids.to(device)
-                if pixel_values is not None:
-                    pixel_values = pixel_values.to(device)
-                if grid_thws is not None:
-                    grid_thws = grid_thws.to(device)
-
-                if _should_log_debug():
-                    logger.debug("🔧 Resumed generation with 1 tool result in context")
             else:
-                # Update input_ids for next iteration (only when no tool was executed)
-                input_ids = torch.cat([input_ids, outputs], dim=-1)  # Append new tokens
-                generation_kwargs["inputs"] = input_ids  # Update for next generation
+                # No tool call completed - just update input_ids for next iteration
+                input_ids = torch.cat([input_ids, outputs], dim=-1)
+                generation_kwargs["inputs"] = input_ids
 
             # Check for EOS
             if model.text_tokenizer.eos_token_id in outputs[0]:

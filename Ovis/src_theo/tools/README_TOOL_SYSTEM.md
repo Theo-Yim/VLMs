@@ -1,198 +1,279 @@
 # Tool System for Ovis2.5
 
-**Zero-configuration tool system** with auto-detection and real-time execution during generation.
+**Universal tool system** supporting any tool with both image and text return types. Features auto-detection and real-time execution during training and inference.
+
+## Overview
+
+The tool system supports two return types:
+- **Image-Returning Tools** - Return processed images (e.g., Crop, Draw, Blur)
+- **Text-Returning Tools** - Return text results (e.g., Identify, Calculate, OCR)
+
+Both types work seamlessly with automatic detection and zero configuration needed.
 
 ## Key Features
 
 - **🔍 Auto-Detection**: Automatically finds and registers all `*_tool.py` files
 - **⚡ Real-time Execution**: Tools execute during generation with pause/resume
-- **🖼️ Visual Feedback**: Tool results (images, text) instantly fed back to model
+- **🎯 Universal Design**: Supports any tool with image or text returns
 - **📝 LLM Guidance**: Tool docstrings automatically guide model usage
-- **🏗️ Unified Architecture**: All tools follow the same simple ToolBase pattern
+- **🏗️ Simple Interface**: All tools inherit from ToolBase
+- **🚀 Flexible**: Create inference-only OR full-featured tools
 
-## System Architecture
+## Quick Start
 
-```
-Generation: "I see a person <tool_call>Crop [100,100,200,200]</tool_call>"
-                                           ↓ PAUSE & EXECUTE
-                              ToolRegistry (scans *_tool.py files)
-                                           ↓
-                               CropTool.execute() → cropped_image
-                                           ↓ RESUME WITH RESULT
-Generation: " The person is wearing a blue jacket."
-```
+### Using Tools During Inference
 
-## Core Components
-
-### **ToolBase** (`tool_base.py`)
 ```python
-class ToolBase:
-    def extract_tool_call(self, text: str) -> Dict  # Parse tool calls
-    def execute(self, image, parameters) -> Dict    # Execute & return result
+from src_theo.tools.inference_integration import chat_with_tool_execution
+
+# Chat with automatic tool execution
+response, thinking, history = chat_with_tool_execution(
+    model=model,
+    prompt="<image>Examine this person's face closely.",
+    images=[image]
+)
 ```
 
-### **ToolRegistry** (`tool_base.py`)
-```python
-registry = ToolRegistry()  # Auto-detects all *_tool.py files
-registry.tools             # {'crop': CropTool(), 'identify': IdentifyTool()}
-registry.detect_tool_call(text)     # Find tool calls in text
-registry.execute_tool_call(call, image)  # Execute tool calls
+The model will automatically:
+1. Generate tool call: `<tool_call>ToolName Parameters</tool_call>`
+2. System pauses, executes tool, adds result to context
+3. Model resumes with tool result available
+
+### Training Data Format
+
+**Image-Returning Tools:**
+```json
+{
+  "from": "gpt",
+  "value": "<tool_call>Crop [100,100,300,400]</tool_call><image>\nThe person is wearing blue."
+}
 ```
+- `<image>` marker indicates where tool's image result appears
 
-### **Available Tools**
-
-**CropTool** (`crop_tool.py`): `<tool_call>Crop [x1,y1,x2,y2]</tool_call>`
-- Crops image regions → returns cropped image
-
-**IdentifyTool** (`mock_id_tool.py`): `<tool_call>Identify [x1,y1,x2,y2]</tool_call>`
-- Mock identification → returns text result
-
-## How It Works
-
-### **1. Auto-Detection on Startup**
-```python
-# ToolRegistry scans tools/ directory for *_tool.py files
-# Automatically imports and registers any ToolBase subclasses
-registry = ToolRegistry()
-# Found: crop_tool.py → CropTool → registered as "crop"
-# Found: mock_id_tool.py → IdentifyTool → registered as "identify"
+**Text-Returning Tools:**
+```json
+{
+  "from": "gpt",
+  "value": "<tool_call>Identify [100,100,300,400]</tool_call><tool_response>James</tool_response>\nThis is James."
+}
 ```
-
-### **2. Real-time Execution During Generation**
-```python
-# Model generates: "I see a person <tool_call>Crop [100,100,200,200]</tool_call>"
-# ↓ System detects "</tool_call>" → PAUSE generation
-# ↓ Execute: CropTool.crop_image(image, [100,100,200,200]) → cropped_image
-# ↓ Add cropped_image to conversation context
-# ↓ RESUME generation: " The person is wearing a blue jacket."
-```
-
-### **3. Technical Implementation**
-- **Token-by-token** generation inside `<tool_call>` for precise detection
-- **Batch generation** outside tool calls for efficiency
-- **Context rebuilding** after tool execution via `model.preprocess_inputs()`
-- **Structured results**: Tools return `{"type": "image|text", "content": ...}`
+- `<tool_response>...</tool_response>` contains tool's text result
+- Kept as-is in training (no processing needed)
 
 ## Creating New Tools
 
-### **Step 1: Create Tool File**
+### Inference-Only Tool (Minimal)
+
+For tools that only need to work during inference (no training needed):
+
 ```python
-# save as: draw_tool.py
+# Ovis/src_theo/tools/your_tool.py
 
 from .tool_base import ToolBase
+from PIL import Image
+import re
 
-class DrawTool(ToolBase):
+class YourTool(ToolBase):
     """
-    Tool for drawing annotations on images.
-    Usage: <tool_call>Draw [description]</tool_call>
-    Example: <tool_call>Draw [red circle around person]</tool_call>
+    Tool description for LLM.
+    Usage: <tool_call>YourTool [parameters]</tool_call>
     """
 
     def __init__(self):
-        self.tool_call_pattern = r"<tool_call>Draw \[([^]]+)\]</tool_call>"
+        # Let's assume that parameter is [x, ...] format
+        # For inference (without markers)
+        self.tool_call_pattern = r"<tool_call>YourTool \[([0-9.,\s]+)\]</tool_call>"
+
+        # For training (with <image> for image tools, <tool_response> for text tools)
+        self.tool_call_with_image_pattern = r"<tool_call>YourTool \[([0-9.,\s]+)\]</tool_call><image>"
 
     def extract_tool_call(self, text: str):
+        """REQUIRED - Extract tool call for inference"""
         match = re.search(self.tool_call_pattern, text)
         if match:
+            params = [float(x.strip()) for x in match.group(1).split(",")]
             return {
-                "parameters": [match.group(1)],
-                "tool_name": "draw",
+                "parameters": params,
+                "tool_name": "your_tool",
                 "tool_instance": self
             }
         return None
 
     def execute(self, image, parameters):
-        description = parameters[0]
-        # Draw annotation on image based on description
-        annotated_image = self.draw_annotation(image, description)
-        return {"type": "image", "content": annotated_image}
+        """REQUIRED - Execute tool - return image or text"""
+        # For image-returning tool:
+        result_image = process_image(image, parameters)
+        return {"type": "image", "content": result_image}
+
+        # For text-returning tool:
+        # result_text = analyze(image, parameters)
+        # return {"type": "text", "content": result_text}
 ```
 
-### **Step 2: That's It!**
-```bash
-# Just save the file as draw_tool.py in the tools/ directory
-# ToolRegistry automatically detects and registers it on next startup
+That's it! This tool:
+- ✅ Works during inference
+- ✅ Auto-detected and registered
+- ✅ Won't be used during training (no `extract_tool_calls()`)
+
+### Full-Featured Tool (Inference + Training)
+
+For tools that should work in both inference and training, additionally implement extract_tool_calls:
+
+```python
+class YourTool(ToolBase):
+
+    ...
+
+    # implement this function
+    def extract_tool_calls(self, text: str):
+        """OPTIONAL - Extract tool calls for training"""
+        tool_calls = []
+        for match in re.finditer(self.tool_call_with_image_pattern, text):
+            params = [float(x.strip()) for x in match.group(1).split(",")]
+            tool_calls.append({
+                "start_pos": match.start(),
+                "end_pos": match.end(),
+                "full_match": match.group(0),
+                "parameters": params
+            })
+        return tool_calls
 ```
+
+This tool:
+- ✅ Works during inference
+- ✅ Works during training
+- ✅ Auto-detected and registered
+- ✅ Included in system prompts
+
+## How It Works
+
+### Inference Flow
 
 **The docstring is crucial** - it tells the LLM:
 - When to use the tool
-- Exact syntax: `<tool_call>Draw [...]</tool_call>`
+- Exact syntax: `<tool_call>ToolName Parameters</tool_call>`
 - Parameter format and examples
 
-## Usage Examples
+**When model generates a tool call:**
+1. System detects `</tool_call>` → **PAUSE** generation
+2. Execute tool → get result (image or text)
+3. Add result to context:
+   - **Image tools**: Add image to visual tokens, rebuild context
+   - **Text tools**: Insert `<tool_response>text</tool_response>`
+4. **RESUME** generation with tool result available
 
-### **Basic Inference**
+### Training Flow
+
+**During dataset processing:**
+1. Detect tool calls in assistant messages
+2. Execute tools to get results
+3. Process based on return type:
+   - **Image tools**: Add image to visual tokens, remove `<image>` marker from text
+   - **Text tools**: Keep `<tool_response>` in text unchanged
+4. Model trains with tool results present in context
+
+## Architecture
+
+### Core Components
+
+**ToolBase** - Base class for all tools:
 ```python
-from src_theo.tools.inference_integration import chat_with_tool_execution
-
-# Load model
-model = AutoModelForCausalLM.from_pretrained("AIDC-AI/Ovis2.5-9B", trust_remote_code=True)
-
-# Chat with automatic tool execution
-response, thinking, history = chat_with_tool_execution(
-    model=model,
-    prompt="<image>Examine this person's clothing in detail",
-    images=[image],
-    temperature=0.6,
-    max_new_tokens=1024
-)
-
-# Model might generate:
-# "I can see a person. <tool_call>Crop [100,100,300,400]</tool_call>
-# The person is wearing a blue denim jacket with silver buttons."
+class ToolBase:
+    def extract_tool_call(text) -> Optional[Dict]    # REQUIRED: Parse single call (inference)
+    def extract_tool_calls(text) -> List[Dict]       # OPTIONAL: Parse all calls (training)
+    def execute(image, parameters) -> Optional[Dict]  # REQUIRED: Execute and return result
 ```
 
-### **Multi-turn Conversations**
+**Method Requirements:**
+- ✅ **`extract_tool_call()`** - **REQUIRED** for inference detection
+- ⚠️ **`extract_tool_calls()`** - **OPTIONAL** for training support (defaults to `return []` if not implemented)
+- ✅ **`execute()`** - **REQUIRED** for tool execution
+
+**Key Insight:** You can create inference-only tools by skipping `extract_tool_calls()` implementation!
+
+**ToolRegistry** - Auto-detection and management:
 ```python
-history = []
-
-# Turn 1
-response1, _, history = chat_with_tool_execution(
-    model=model,
-    prompt="<image>What do you see?",
-    images=[image],
-    history=history
-)
-
-# Turn 2 - maintains context including any tool results
-response2, _, history = chat_with_tool_execution(
-    model=model,
-    prompt="Focus on the person's accessories",
-    history=history
-)
+registry = ToolRegistry()  # Auto-detects all *_tool.py files
+registry.tools             # {'crop': CropTool(), 'identify': IdentifyTool(), ...}
+registry.detect_tool_call(text)                      # Find tool call (inference)
+registry.execute_tool_call(call, image)              # Execute tool
+registry.process_tools_for_training(text, image)     # Process for training
 ```
 
-### **Debug Mode**
+### File Structure
+
+```
+Ovis/src_theo/tools/
+├── tool_base.py              # ToolBase + ToolRegistry
+├── crop_tool.py              # Image-returning tool example
+├── mock_id_tool.py           # Text-returning tool example
+├── inference_integration.py  # Real-time execution during generation
+└── your_tool.py              # Your custom tool (auto-detected!)
+
+Ovis/ovis/train/dataset/
+└── conversation_dataset.py   # Training data processing
+```
+
+## Debug Mode
+
+Enable debug logging to see tool execution in detail:
+
 ```python
 from src_theo.tools.inference_integration import enable_debug_logging
+
 enable_debug_logging()
-
-# Or set environment variable
-export OVIS_TOOL_DEBUG=true
+# Or set environment variable: OVIS_TOOL_DEBUG=true
 ```
 
-## Tool Reference
+## Important Notes
 
-### **Current Tools**
+### Why `<image>` marker is needed in dataset generation and removed during training:
 
-| Tool | Syntax | Purpose | Returns |
-|------|--------|---------|---------|
-| **Crop** | `<tool_call>Crop [x1,y1,x2,y2]</tool_call>` | Crop image regions | Cropped image |
-| **Identify** | `<tool_call>Identify [x1,y1,x2,y2]</tool_call>` | Mock identification | Text result |
+**When creating training data:**
+- ✅ **DO add** `<image>` marker: `<tool_call>Crop [...]</tool_call><image>` for image-returning tools
+- This tells the system "execute this tool and insert the returned image here"
 
-### **Tool Result Types**
-```python
-{"type": "image", "content": PIL_Image}        # Visual result
-{"type": "text", "content": "text response"}  # Text result
+**During training data processing:**
+- System executes the tool → gets the image result
+- Adds image to visual tokens
+- Removes `<image>` marker from text (so model doesn't learn to generate it)
+- Model learns: after `</tool_call>`, new image appears in context
+- At inference: system replicates this by adding image to context
+
+**Key:** The `<image>` marker is essential for data preparation but removed before model training.
+
+### Why `<tool_response>` is needed for text-returning-tool in training dataset:
+
+- `<tool_response>` is **actual text** that appears in model's context
+- Model needs to learn to expect this format after tool calls
+- At inference: system inserts same format
+
+
+## Testing
+
+Verify the tool system is working correctly:
+
+```bash
+python Ovis/src_theo/tools/test_tool_system.py
 ```
 
-## Quick Start
+**Run this test when:**
+- ✅ After adding a new tool
+- ✅ After modifying tool processing logic
+- ✅ To verify training data processing works correctly
+- ✅ Before deploying to production
 
-1. **Create a tool**: `my_tool.py` with ToolBase subclass
-2. **Add docstring**: LLM usage instructions
-3. **Save in tools/**: Auto-detected on startup
-4. **Use in inference**: Model automatically uses based on context
+All 7 tests should pass (auto-detection, inference, training for both image and text tools).
 
-## Examples
+## Summary
 
-See `example_usage.py` for complete working examples.
+This universal tool system:
+- ✅ Supports any tool returning images or text
+- ✅ Auto-detects tools from `*_tool.py` files
+- ✅ Executes tools in real-time during inference
+- ✅ Processes tool results correctly during training (if `extract_tool_calls()` implemented)
+- ✅ Maintains perfect training-inference alignment
+- ✅ Supports inference-only tools (skip `extract_tool_calls()`)
+- ✅ Requires zero configuration - just add a tool file!
+
+Add new tools by simply creating a `*_tool.py` file. That's it!

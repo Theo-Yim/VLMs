@@ -9,59 +9,24 @@ from ovis.train.dataset.multimodal_dataset import MultimodalDataset
 from ovis.util.constants import IGNORE_ID
 from ovis.util.utils import rank0_print
 
+# Use the universal ToolRegistry from tool_base
+try:
+    from src_theo.tools.tool_base import ToolRegistry
+except ImportError:
+    logging.warning("ToolRegistry not available - tool calls will not be processed during training")
 
-# Tool Registry System for extensible tool support
-class ToolRegistry:
-    """Registry for handling multiple tool types in a scalable way"""
+    # Fallback dummy registry
+    class ToolRegistry:
+        """Dummy registry when real one is not available"""
 
-    def __init__(self):
-        self.tools = {}
-        self._setup_available_tools()
+        def __init__(self):
+            self.tools = {}
 
-    def _setup_available_tools(self):
-        """Initialize available tools"""
-        # Try to load CropTool
-        try:
-            from src_theo.tools.crop_tool import CropTool
-
-            self.register_tool("crop", CropTool())
-        except ImportError:
-            logging.warning("CropTool not available for training.")
-
-        # Future tools can be added here:
-        # try:
-        #     from drawing_tool import DrawingTool
-        #     self.register_tool('draw', DrawingTool())
-        # except ImportError:
-        #     pass
-
-    def register_tool(self, tool_name: str, tool_instance):
-        """Register a tool instance"""
-        self.tools[tool_name] = tool_instance
-
-    def detect_tool_calls(self, text: str) -> bool:
-        """Check if text contains any supported tool calls"""
-        if not text or not isinstance(text, str):
+        def detect_tool_calls(self, text: str) -> bool:
             return False
 
-        # Check each registered tool
-        for tool_name, tool_instance in self.tools.items():
-            if hasattr(tool_instance, "extract_tool_calls"):
-                tool_calls = tool_instance.extract_tool_calls(text)
-                if tool_calls:
-                    return True
-        return False
-
-    def process_text_with_tools(self, text: str, image):
-        """Process text containing tool calls using appropriate tools"""
-        # For now, prioritize crop tool
-        if "crop" in self.tools:
-            crop_tool = self.tools["crop"]
-            if hasattr(crop_tool, "create_multimodal_content"):
-                return crop_tool.create_multimodal_content(text, image)
-
-        # Fallback to text-only content
-        return [{"type": "text", "text": text}]
+        def process_tools_for_training(self, text: str, image):
+            return [], text
 
 
 class ConversationDataset(MultimodalDataset):
@@ -89,7 +54,7 @@ class ConversationDataset(MultimodalDataset):
         sample = self.samples[i]
         conversations = sample["conversations"]
 
-        # 이미지/비디오 처리 (기존과 동일)
+        # Load images/videos
         images = None
         videos = None
         n_image_or_frame = 0
@@ -112,14 +77,42 @@ class ConversationDataset(MultimodalDataset):
             videos = [video]
             n_image_or_frame = len(video)
 
-        # 픽셀 설정 (기존과 동일)
-        if images is None and videos is None:
+        # ========== PRE-PROCESS TOOL CALLS ==========
+        tool_result_images = []
+        processed_conversations = []
+
+        for conv in conversations:
+            if conv["from"] == "gpt" and self._has_tool_calls(conv["value"]):
+                # Assistant message with tool calls - pre-process them
+                original_image = images[0] if images else None
+
+                # Universal tool processing
+                result_images, cleaned_text = self.tool_processors.process_tools_for_training(
+                    conv["value"], original_image
+                )
+
+                tool_result_images.extend(result_images)
+                processed_conversations.append({"from": conv["from"], "value": cleaned_text})
+            else:
+                processed_conversations.append(conv)
+
+        # Combine all images
+        all_images = []
+        if images:
+            all_images.extend(images)
+        all_images.extend(tool_result_images)
+
+        if all_images:
+            n_image_or_frame = len(all_images)
+
+        # Set pixel values
+        if not all_images and videos is None:
             min_pixels = 0
             max_pixels = 0
         elif videos is not None:
             min_pixels = self.training_args.video_min_pixels
             max_pixels = self.training_args.video_max_pixels
-        elif len(images) == 1:
+        elif len(all_images) == 1:
             min_pixels = self.training_args.single_image_min_pixels
             max_pixels = self.training_args.single_image_max_pixels
         else:
@@ -133,18 +126,15 @@ class ConversationDataset(MultimodalDataset):
                 min_pixels, self.training_args.single_image_max_pixels // n_image_or_frame
             )
 
-        # ======= 핵심 수정 부분 시작 =======
-
-        # 1. conversations → messages 변환 (with tool call support)
+        # Convert to messages (tools already processed, so skip_tool_processing=True)
         messages, has_think_tag = self._convert_conversations_to_messages(
-            conversations, images, videos
+            processed_conversations, all_images, videos
         )
 
-        # 2. Ovis2.5 preprocess_inputs 호출 - user message만으로 prompt 생성
+        # Generate input_ids
         user_messages = [msg for msg in messages if msg["role"] == "user"]
         assistant_messages = [msg for msg in messages if msg["role"] == "assistant"]
 
-        # User prompt 생성 (add_generation_prompt=True로 <|im_start|>assistant 추가)
         input_ids, pixel_values, grid_thws = self.model.preprocess_inputs(
             messages=user_messages,
             min_pixels=min_pixels,
@@ -153,37 +143,34 @@ class ConversationDataset(MultimodalDataset):
             enable_thinking=has_think_tag,
         )
 
-        # Assistant 응답 수동으로 추가
+        # Add assistant response
         if assistant_messages:
-            # Handle multimodal content properly
             assistant_content = assistant_messages[0]["content"]
             assistant_tokens = []
 
-            for content_item in assistant_content:
-                if content_item["type"] == "text":
-                    # Tokenize text parts only
-                    text_tokens = self.text_tokenizer.encode(
-                        content_item["text"], add_special_tokens=False
-                    )
-                    assistant_tokens.extend(text_tokens)
-                elif content_item["type"] == "image":
-                    # Skip images - they're handled by pixel_values/grid_thws
-                    continue
+            if isinstance(assistant_content, list):
+                for content_item in assistant_content:
+                    if content_item["type"] == "text":
+                        text_tokens = self.text_tokenizer.encode(
+                            content_item["text"], add_special_tokens=False
+                        )
+                        assistant_tokens.extend(text_tokens)
+            else:
+                assistant_tokens = self.text_tokenizer.encode(
+                    assistant_content, add_special_tokens=False
+                )
 
             im_end_tokens = self.text_tokenizer.encode("<|im_end|>", add_special_tokens=False)
 
-            # input_ids에 assistant 내용과 im_end 추가
             input_ids_list = input_ids[0].tolist()
             input_ids_list.extend(assistant_tokens)
             input_ids_list.extend(im_end_tokens)
             input_ids = torch.tensor(input_ids_list, dtype=torch.long).unsqueeze(0)
 
-        # 3. Labels 생성
+        # Generate labels
         labels = self._generate_labels(input_ids, messages)
 
-        # ======= 핵심 수정 부분 끝 =======
-
-        # 길이 제한 (기존과 동일)
+        # Truncate
         if pixel_values is None:
             input_ids, pixel_values, grid_thws, labels = self.truncate_inputs(
                 input_ids,
@@ -201,9 +188,7 @@ class ConversationDataset(MultimodalDataset):
                 max_length=self.training_args.multimodal_max_length,
             )
 
-        assert self.text_tokenizer.pad_token_id not in input_ids, (
-            f"The sample's text contains a padding token: `{self.text_tokenizer.pad_token}`"
-        )
+        assert self.text_tokenizer.pad_token_id not in input_ids
 
         del sample
         return dict(
@@ -215,7 +200,10 @@ class ConversationDataset(MultimodalDataset):
         )
 
     def _convert_conversations_to_messages(self, conversations, images, videos):
-        """conversations 형태를 messages 형태로 변환 (with tool call support)"""
+        """
+        Convert conversations to messages format.
+
+        """
         messages = []
         has_think_tag = False
 
@@ -225,34 +213,29 @@ class ConversationDataset(MultimodalDataset):
             role = "user" if conv["from"] == "human" else "assistant"
 
             if role == "user":
-                # User 메시지에 이미지/비디오 추가
+                # User message - add images/videos
                 content = []
 
-                # 이미지 추가
                 if images is not None:
                     for image in images:
                         content.append({"type": "image", "image": image})
 
-                # 비디오 추가
                 if videos is not None:
                     content.append({"type": "video", "video": videos[0]})
 
-                # 텍스트 추가
                 content.append({"type": "text", "text": conv["value"]})
 
                 messages.append({"role": role, "content": content})
             else:
-                # Assistant 메시지 - check for tool calls
+                # Assistant message
                 text = conv["value"]
-                if self._has_tool_calls(text) and images:
-                    # Process with tool processors to create multimodal content
-                    text_with_tools = self.tool_processors.process_text_with_tools(text, images[0])
-                    messages.append({"role": role, "content": text_with_tools})
-                else:
-                    # Regular assistant message
-                    messages.append({"role": role, "content": [{"type": "text", "text": text}]})
 
-                has_think_tag = text.startswith("<think>")
+                # Check for <think> tag
+                if text.startswith("<think>"):
+                    has_think_tag = True
+
+                # Tool processing
+                messages.append({"role": role, "content": [{"type": "text", "text": text}]})
 
         return messages, has_think_tag
 
