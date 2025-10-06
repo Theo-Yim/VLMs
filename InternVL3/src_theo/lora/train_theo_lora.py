@@ -69,6 +69,7 @@ class DataArguments:
     """Data configuration arguments."""
 
     data_path: str = field(default="./data/train_data.json")
+    eval_data_path: str = field(default=None)
     image_folder: str = field(default="./data/images")
     image_size: int = field(default=448)
     max_dynamic_patches: int = field(default=12)
@@ -224,8 +225,22 @@ def train():
         )
         print_trainable_parameters(model)
 
-    # Create dataset
+    # Create datasets
     train_dataset = create_dataset(data_args, tokenizer)
+
+    # Create eval dataset if eval_data_path is provided
+    eval_dataset = None
+    if data_args.eval_data_path is not None:
+        print(f"Loading evaluation dataset from: {data_args.eval_data_path}")
+        eval_data_args = DataArguments(
+            data_path=data_args.eval_data_path,
+            eval_data_path=None,
+            image_folder=data_args.image_folder,
+            image_size=data_args.image_size,
+            max_dynamic_patches=data_args.max_dynamic_patches
+        )
+        eval_dataset = create_dataset(eval_data_args, tokenizer)
+        print(f"Evaluation dataset size: {len(eval_dataset)}")
 
     # Calculate max_steps to avoid dataloader length issues (from Ovis implementation)
     dataset_size = len(train_dataset)
@@ -283,6 +298,7 @@ def train():
         model=model,
         args=training_args,
         train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         data_collator=data_collator,
     )
 

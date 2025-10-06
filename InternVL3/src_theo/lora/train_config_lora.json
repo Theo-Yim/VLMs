@@ -3,6 +3,7 @@
     "use_flash_attn": true,
     
     "data_path": "/workspace/VLMs/utils/lh-poc/dataset/dataset_lh_theo_v2_train.json",
+    "eval_data_path": "/workspace/VLMs/utils/lh-poc/dataset/dataset_lh_theo_v2_val.json",
     "image_folder": "/home/Theo-Yim/data/lh-poc/lh-data-image-train/",
     "image_size": 448,
     "max_dynamic_patches": 12,
@@ -26,18 +27,21 @@
         "fc2"
     ],
     
-    "output_dir": "/workspace/VLMs/InternVL3/checkpoints/internvl35_lora_lh_theo_v2",
+    "output_dir": "/workspace/VLMs/InternVL3/checkpoints/internvl35_lora_lh_theo_v2_try2",
     "overwrite_output_dir": true,
     "do_train": true,
-    "do_eval": false,
+    "do_eval": true,
     
-    "num_train_epochs": 5,
+    "num_train_epochs": 4,
     "per_device_train_batch_size": 1,
     "gradient_accumulation_steps": 2,
-    "eval_strategy": "no",
+    "eval_strategy": "steps",
+    "eval_steps": 0.4,
     "save_strategy": "steps",
-    "save_steps": 100,
-    "save_total_limit": 3,
+    "save_steps": 0.4,
+    "save_total_limit": 5,
+    "load_best_model_at_end": true,
+    "metric_for_best_model": "eval_loss",
     
     "learning_rate": 1e-4,
     "max_grad_norm": 1.0,

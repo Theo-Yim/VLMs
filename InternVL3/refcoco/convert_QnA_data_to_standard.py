@@ -11,7 +11,7 @@ from typing import Any, Dict
 
 
 # System prompt for crop tool instructions
-SYSTEM_PROMPT = """You have access to a Crop tool for detailed visual analysis. When you need to examine a specific region of the image more closely, use the tool in this format: <tool_call>Crop [x, y, w, h]</tool_call>
+SYSTEM_PROMPT = """You have access to a Crop tool for detailed visual analysis. When you need to examine a specific region of the image more closely, use the tool in this format: <tool_call>Crop [x, y, x2, y2]</tool_call>
 
 After each tool use, a cropped image will be provided for your closer inspection. Use this capability to provide detailed and accurate responses based on visual evidence."""
 
@@ -139,7 +139,7 @@ def main():
         description="Convert QnA format to standard conversation format"
     )
     parser.add_argument("--input_file", type=str, default="refcoco_qa_pairs.jsonl",help="Input JSONL file with QnA format")
-    parser.add_argument("--output_file", type=str, default="refcoco_qa_pairs_train.json", help="Output JSON file with conversation format")
+    parser.add_argument("--output_file", type=str, default="refcoco_qa_pairs.json", help="Output JSON file with conversation format")
 
     args = parser.parse_args()
 

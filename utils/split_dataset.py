@@ -48,5 +48,5 @@ def split_dataset(input_path, train_ratio=0.85, seed=42):
     return train_path, val_path
 
 if __name__ == "__main__":
-    input_file = "./utils/lh-poc/training_dataset_lh_jh.json"
-    split_dataset(input_file, train_ratio=0.8, seed=42)
+    input_file = "./utils/lh-poc/dataset/dataset_lh_theo_v2_train.json"
+    split_dataset(input_file, train_ratio=0.9, seed=42)
