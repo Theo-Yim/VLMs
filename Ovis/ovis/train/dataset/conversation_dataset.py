@@ -207,7 +207,9 @@ class ConversationDataset(MultimodalDataset):
         messages = []
         has_think_tag = False
 
-        assert len(conversations) < 3, "Multi-turn conversations are not supported yet."
+        assert len(conversations) < 3 or (
+            len(conversations) == 3 and conversations[0]["from"] == "system"
+        ), "Multi-turn conversations are not supported yet."
 
         for conv in conversations:
             role = "user" if conv["from"] == "human" else "assistant"
