@@ -313,7 +313,7 @@ def train():
 
     # Start training
     print("Starting training...")
-    trainer.train()
+    trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
 
     # Save final model
     print("Saving final model...")

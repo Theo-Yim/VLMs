@@ -31,7 +31,8 @@
     "overwrite_output_dir": true,
     "do_train": true,
     "do_eval": true,
-    
+    "resume_from_checkpoint": true,
+
     "num_train_epochs": 4,
     "per_device_train_batch_size": 1,
     "gradient_accumulation_steps": 2,
