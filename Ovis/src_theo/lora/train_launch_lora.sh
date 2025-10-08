@@ -3,6 +3,7 @@
 # Ovis2.5 LoRA Fine-tuning Launch Script
 # Usage: ./train_launch_lora.sh [config_file] [num_gpus]
 
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7  # Adjust based on your available GPUs
 export PYTHONPATH=/workspace/VLMs/Ovis:$PYTHONPATH
 
 set -e
@@ -10,8 +11,8 @@ set -e
 # Default config file
 CONFIG_FILE=${1:-"./Ovis/src_theo/lora/train_config_lora.json"}
 
-# Default number of GPUs (can be overridden)
-NUM_GPUS=${2:-1}
+# Determine number of GPUs
+NUM_GPUS=$(echo $CUDA_VISIBLE_DEVICES | tr ',' '\n' | wc -l)
 
 # Check if config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
