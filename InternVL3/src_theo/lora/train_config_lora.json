@@ -34,12 +34,12 @@
     "resume_from_checkpoint": true,
 
     "num_train_epochs": 4,
-    "per_device_train_batch_size": 1,
+    "per_device_train_batch_size": 2,
     "gradient_accumulation_steps": 2,
     "eval_strategy": "steps",
-    "eval_steps": 0.4,
+    "eval_steps": 0.26,
     "save_strategy": "steps",
-    "save_steps": 0.4,
+    "save_steps": 0.26,
     "save_total_limit": 5,
     "load_best_model_at_end": true,
     "metric_for_best_model": "eval_loss",
@@ -60,7 +60,9 @@
     "dataloader_drop_last": true,
     "dataloader_persistent_workers": true,
     "remove_unused_columns": false,
-    "gradient_checkpointing": false,
+    "gradient_checkpointing": true,
+
+    "deepspeed": "/workspace/VLMs/Ovis/scripts/zero_configs/zero2_cp.json",
     
     "seed": 42,
     "report_to": "none",

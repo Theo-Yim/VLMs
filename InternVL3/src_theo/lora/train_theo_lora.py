@@ -237,7 +237,7 @@ def train():
             eval_data_path=None,
             image_folder=data_args.image_folder,
             image_size=data_args.image_size,
-            max_dynamic_patches=data_args.max_dynamic_patches
+            max_dynamic_patches=data_args.max_dynamic_patches,
         )
         eval_dataset = create_dataset(eval_data_args, tokenizer)
         print(f"Evaluation dataset size: {len(eval_dataset)}")
@@ -292,6 +292,26 @@ def train():
 
     # Configure training arguments
     training_args.remove_unused_columns = False  # Keep pixel_values and image_flags
+
+    # Handle gradient checkpointing configuration
+    if training_args.gradient_checkpointing:
+        # Check if DeepSpeed is being used
+        using_deepspeed = (
+            hasattr(training_args, "deepspeed") and training_args.deepspeed is not None
+        )
+
+        if using_deepspeed:
+            # DeepSpeed handles gradient checkpointing well
+            print("✓ Using DeepSpeed with gradient checkpointing (recommended)")
+        else:
+            # Native DDP + gradient checkpointing + LoRA is problematic
+            print("⚠️  WARNING: Gradient checkpointing with native DDP may cause errors.")
+            print("   Consider using DeepSpeed ZeRO-2 or ZeRO-3 instead.")
+            # Try to enable anyway for non-DeepSpeed case
+            if hasattr(model, "gradient_checkpointing_enable"):
+                model.gradient_checkpointing_enable()
+            training_args.ddp_find_unused_parameters = True
+            training_args.ddp_broadcast_buffers = False
 
     # Create InternVLTrainer (minimal wrapper handling inputs_embeds issue)
     trainer = InternVLTrainer(

@@ -2,6 +2,7 @@ data_tmp/
 InternVL3/checkpoints/
 InternVL3/samples/
 .vscode/
+.claude/
 *.pkl
 Ovis/checkpoints/
 *.safetensors

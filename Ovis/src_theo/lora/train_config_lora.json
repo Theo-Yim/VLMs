@@ -56,7 +56,7 @@
     "dataloader_shuffle": true,
     "remove_unused_columns": false,
     "gradient_checkpointing": true,
-    "deepspeed": "/workspace/VLMs/Ovis/scripts/zero_configs/zero2_cp.json",
+    "deepspeed": "/workspace/VLMs/Ovis/scripts/zero_configs/zero3_cp.json",
     
     "ovis_pretrained_path": "AIDC-AI/Ovis2.5-9B",
     "stage": 3,
