@@ -6,14 +6,17 @@ This project creates high-quality synthetic Vision-Language Model (VLM) training
 
 The pipeline intelligently merges referring expressions from RefCOCO, RefCOCOplus, and RefCOCOg datasets, then generates sophisticated question-answer pairs with multimodal interleaved reasoning. The generated dataset supports training VLMs with enhanced visual understanding and reasoning capabilities.
 
-### Summary
+**Quality**: Automatic filtering ensures 100% crop tool usage consistency and removes samples with inconsistent reasoning, achieving a quality score of 90.6/100.
+
+### Pipeline Summary
 
 1. **merge_refcoco_datasets.py**: Merges RefCOCO datasets with semantic similarity filtering → `merged_refcoco_data.pkl`
 2. **refcoco_main3.py**: Generates Q, A1, A2 → Individual JSON files
 3. **refcoco_main3_verify.py**: Fixes missing A2 responses (optional)
 4. **refcoco_main_llm.py**: Generates refined A3 responses, with automated verification and fixing of incomplete tool uses and response format.
 5. **create_jsonl.py**: Converts to training JSONL format with Q and A3
-6. **convert_QnA_data_to_standard.py**: Converts to standard conversation format for immediate training use
+6. **convert_QnA_data_to_standard.py**: Converts to standard conversation format + **quality filtering** (NEW)
+7. **validate_dataset.py**: Validates dataset quality (optional)
 
 ## Usage
 
@@ -93,38 +96,59 @@ python create_jsonl.py --input_dir /path/to/json/files --output_file refcoco_qa_
 - `--input_dir`: Directory containing JSON files (default: `/mnt/nas3/Data/coco/refcoco_vlm_results_theo_llm/`)
 - `--output_file`: Output JSONL file path (default: `refcoco_qa_pairs.jsonl`)
 
-### Step 6: Conversation Format Conversion
+### Step 6: Conversation Format Conversion + Quality Filtering
 
-Convert QnA format to standard conversation format for immediate training use:
+Convert QnA format to standard conversation format with automatic quality filtering:
 
 ```bash
-python convert_QnA_data_to_standard.py refcoco_qa_pairs.jsonl refcoco_train_ready.json
+python convert_QnA_data_to_standard.py \
+    --input_file refcoco_qa_pairs.jsonl \
+    --output_file refcoco_train_ready.json
 ```
 
 **Features**:
 - Converts QnA format to standard "human"/"gpt" conversation format
 - Processes tool calls: `{Crop ...}` → `<tool_call>Crop ...</tool_call>`
+- **NEW: Automatic quality filtering** (filters out samples without crop calls or inconsistent mentions)
 - Ready for direct use in VLM training pipelines
 
 **Options**:
-- `--image_base_path`: Base path for resolving relative image paths
+- `--no_filter`: Disable quality filtering (keep all samples)
+
+**Quality Filtering** (enabled by default):
+- Removes samples without crop tool calls (16.1%)
+- Removes samples mentioning crop without actually calling it (0.2%)
+- Removes very easy questions that don't need cropping (0.03%, conservative)
+- **Typical retention**: ~84% of samples
+- **Quality improvement**: Score increases from 83.2 to 90.6/100
+
+### Step 7 (Optional): Validate Dataset Quality
+
+This step is already integrated in Step 6. But, we can validate the dataset quality at any time:
+
+```bash
+python validate_dataset.py --file_path refcoco_train_ready.json
+```
 
 ## File Structure
 
 ```
 refcoco/
-├── README.md                     # This file
-├── merge_refcoco_datasets.py     # Dataset merging and preprocessing
-├── refcoco_main3.py             # Main QA generation pipeline
-├── refcoco_main3_verify.py      # Response verification and fixing
-├── refcoco_main_llm.py          # LLM-based answer enhancement
-├── create_jsonl.py              # Training format conversion
-├── convert_QnA_data_to_standard.py # Conversation format conversion
-└── extras/                      # Experimental code (not in active use)
-    ├── inference_*.py           # Various inference experiments
-    ├── refcoco_main*.py         # Alternative pipeline versions
-    ├── questions.py             # Sample question templates
-    └── ref_eval_sample_kr.py    # Evaluation utilities
+├── README.md                        # This file
+├── merge_refcoco_datasets.py        # Dataset merging and preprocessing
+├── refcoco_main3.py                 # Main QA generation pipeline
+├── refcoco_main3_verify.py          # Response verification and fixing
+├── refcoco_main_llm.py              # LLM-based answer enhancement
+├── create_jsonl.py                  # Training format conversion
+├── convert_QnA_data_to_standard.py  # Conversation format conversion + filtering
+├── validate_dataset.py              # Standalone quality validation tool
+├── filter_dataset.py                # Standalone filtering utility
+├── FILTERING_REPORT.md              # Detailed quality analysis
+└── extras/                          # Experimental code (not in active use)
+    ├── inference_*.py               # Various inference experiments
+    ├── refcoco_main*.py             # Alternative pipeline versions
+    ├── questions.py                 # Sample question templates
+    └── ref_eval_sample_kr.py        # Evaluation utilities
 ```
 
 ## Output Format

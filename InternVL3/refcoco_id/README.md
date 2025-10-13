@@ -1,12 +1,25 @@
 # Identity Tool Calling Dataset Generation
 
+## Overview
+
+**Goal**: Train VLMs to use an **Identify tool** for recognizing people in images through tool-calling. Additionally, it will give the model the ability to understand person-referring in the prompt.
+
+**Dataset**: 45k Q&A pairs (31k single-person + 14k multi-person) with sequential tool calls
+- **Single-person Q&A**: "Who is the person wearing blue?" → 1 tool call
+- **Multi-person Q&A**: "Who are all the people visible?" → 2-3 tool calls
+
+**Quick Start**:
+```bash
+./generate_id_dataset_multi.sh  # Generates complete 45k dataset (~8 hours, 3 GPUs)
+```
+
 ## Purpose
 
-Train VLMs to use an **Identify tool** for recognizing people in images. The model should:
+The model should:
 1. Observe visual details (clothing, position, actions)
 2. Call `<tool_call>Identify [x,y,x2,y2]</tool_call>` with person's bounding box
 3. Receive `<tool_response>Name</tool_response>`
-4. Answer identity questions using the retrieved name
+4. Answer identity questions using the retrieved name(s)
 
 ## Context
 
@@ -148,13 +161,16 @@ python identity_stage2.py \
 ## Files
 
 **Scripts:**
-- `generate_identity_dataset.sh` - **Main script** (parallel generation across GPUs)
+- `generate_id_dataset.sh` - Single-person parallel generation
+- `generate_id_dataset_multi.sh` - Multi-person generation + auto-merge
+- `merge_datasets.py` - Manual merge utility (for custom workflows)
 - `monitor_progress.sh` - Progress monitoring
-- `identity_stage1.py` + `processor_stage1.py` - Stage 1 (LLM generation with enhanced prompts)
-- `identity_stage2.py` + `processor_stage2.py` - Stage 2 (refinement + answer enrichment)
+- `identity_stage1.py` + `processor_stage1.py` - Stage 1 (supports `--multi_person` flag)
+- `identity_stage2.py` + `processor_stage2.py` - Stage 2 (handles both single & multi Q&A)
 
 **Samples:**
-- `identity_qa_pairs_sample.json` - Gold standard (6 examples)
+- `identity_qa_pairs_sample.json` - Single-person examples (6 samples, 1 tool call each)
+- `identity_qa_pairs_multi_test.json` - Multi-person examples (3 samples, 2-3 tool calls each)
 - `stage1_test/` → `identity_qa_pairs_test.json` - Example outputs
 - `QUALITY_COMPARISON.md` - Quality validation
 
@@ -162,31 +178,72 @@ python identity_stage2.py \
 
 ## Production Usage
 
-**Option 1: Parallel Generation (Recommended - 7 GPUs, ~12 hours)**
+### Single-Person Dataset (31k samples)
+
+**Parallel Generation**
 ```bash
-# Edit GPUs in generate_identity_dataset.sh if needed (default: GPUs 1-7)
-./generate_identity_dataset.sh
+# Edit GPUs in generate_id_dataset.sh if needed
+./generate_id_dataset.sh
 
 # Monitor progress in another terminal
 ./monitor_progress.sh
 ```
 
-**Option 2: Single GPU (Manual)**
+**Sngle GPU (Manual)**
 ```bash
-# Stage 1: Generate raw Q&A (uses GPU 1, ~4 days)
+# Stage 1: Generate raw Q&A
 CUDA_VISIBLE_DEVICES=1 python identity_stage1.py \
-  --merged_data ../../merged_refcoco_data.pkl \
+  --merged_data merged_refcoco_data.pkl \
   --coco_path /mnt/nas3/Data/coco \
-  --output_folder /mnt/nas3/Data/coco/refcoco_identity_stage1 \
   --start 0 --end -1
 
-# Stage 2: Refine and enrich (CPU only, fast)
+# Stage 2: Refine and enrich
 python identity_stage2.py \
   --stage1_folder /mnt/nas3/Data/coco/refcoco_identity_stage1 \
-  --output identity_qa_pairs_31k.json
+  --output dataset/identity_qa_pairs_31k.json
 ```
 
+### Multi-Person Dataset (14k samples, 2+ tool calls per Q&A)
+
+**Multi-person questions require identifying 2+ people sequentially**
+
+**Parallel Generation**
+```bash
+# Generates multi-person Q&A + auto-merges with single-person dataset
+./generate_id_dataset_multi.sh
+# Output: dataset/identity_qa_pairs_45k_complete.json (31k single + 14k multi)
+```
+
+**Sngle GPU (Manual)**
+```bash
+# Stage 1: Generate multi-person Q&A (--multi_person flag)
+CUDA_VISIBLE_DEVICES=1 python identity_stage1.py \
+  --merged_data merged_refcoco_data.pkl \
+  --coco_path /mnt/nas3/Data/coco \
+  --output_folder /mnt/nas3/Data/coco/refcoco_identity_stage1_multi \
+  --multi_person \
+  --start 0 --end -1
+
+# Stage 2: Refine (same script, auto-detects multi-person Q&A)
+python identity_stage2.py \
+  --stage1_folder /mnt/nas3/Data/coco/refcoco_identity_stage1_multi \
+  --output dataset/identity_qa_pairs_multi_14k.json
+
+# Stage 3: Merge with single-person dataset
+python merge_datasets.py \
+  --single_person dataset/identity_qa_pairs_31k.json \
+  --multi_person dataset/identity_qa_pairs_multi_14k.json \
+  --output dataset/identity_qa_pairs_45k_complete.json \
+  --analyze
+```
+
+**Multi-Person Question Types:**
+- **Group**: "Who are all the people visible in this image?" (identifies all N people)
+- **Selective**: "Who are the two people sitting on the bench?" (identifies subset)
+- **Comparative**: "Between the two people, who is taller?" (compares two people)
+- **Sequential**: "Who are the people from left to right?" (ordered identification)
+
 **Configuration:**
-- Total: ~31k samples (1 Q&A per person, ~2.2 people/image, 14k images)
-- Time: ~12 hours with 7 GPUs, ~4 days with 1 GPU
-- Script auto-splits work across GPUs and supports resume
+- Single-person: ~31k samples (1 tool call/Q&A, 14k images)
+- Multi-person: ~14k samples (2.3 tool calls/Q&A, 10.8k images with 2+ people)
+- **Merged: ~45k samples (1.4 tool calls/Q&A, 14k images)**

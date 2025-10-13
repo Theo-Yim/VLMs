@@ -318,17 +318,132 @@ After each tool use, the person's identity will be provided as: <tool_response>N
 
         return fixed_text, num_replacements
 
+    def enrich_multi_person_answer(
+        self, answer_content: str, question: str, person_names: List[str]
+    ) -> str:
+        """
+        Enrich multi-person answer to include all identified people
+        """
+        # If answer already includes good detail (>15 words), keep it
+        if len(answer_content.split()) > 15:
+            return answer_content
+
+        # Build enriched answer based on number of people
+        num_people = len(person_names)
+
+        if "who are all" in question.lower() or "everyone" in question.lower():
+            # Group identification
+            if num_people == 2:
+                enriched = f"The people in the image are {person_names[0]} and {person_names[1]}."
+            elif num_people == 3:
+                enriched = f"The three people visible are {person_names[0]}, {person_names[1]}, and {person_names[2]}."
+            else:
+                names_str = ", ".join(person_names[:-1]) + f", and {person_names[-1]}"
+                enriched = f"The {num_people} people in the image are {names_str}."
+        elif "two people" in question.lower():
+            enriched = f"The two people are {person_names[0]} and {person_names[1]}."
+        elif "left to right" in question.lower() or "from left" in question.lower():
+            names_str = ", ".join(person_names[:-1]) + f", and {person_names[-1]}"
+            enriched = f"From left to right, the people are {names_str}."
+        else:
+            # Generic fallback
+            if num_people == 2:
+                enriched = f"The two individuals are {person_names[0]} and {person_names[1]}."
+            else:
+                names_str = ", ".join(person_names[:-1]) + f", and {person_names[-1]}"
+                enriched = f"The people are {names_str}."
+
+        self.metrics["enriched_answers"] += 1
+        return enriched
+
+    def fix_multi_person_answer(
+        self, answer_raw: str, question: str, person_names: List[str]
+    ) -> Tuple[str, Dict]:
+        """
+        Fix multi-person answer formatting (handles MULTIPLE tool call placeholders)
+        """
+        stats = {
+            "missing_think": False,
+            "missing_answer": False,
+        }
+
+        has_think = "<think>" in answer_raw and "</think>" in answer_raw
+        has_answer = "<answer>" in answer_raw and "</answer>" in answer_raw
+
+        if not has_think:
+            stats["missing_think"] = True
+        if not has_answer:
+            stats["missing_answer"] = True
+
+        if not has_think and not has_answer:
+            think = answer_raw.strip()
+            enriched = self.enrich_multi_person_answer("", question, person_names)
+            answer_raw = f"<think>\n{think}\n</think>\n<answer>{enriched}</answer>"
+
+        # Enrich <answer> section
+        answer_match = re.search(r"<answer>(.*?)</answer>", answer_raw, re.DOTALL)
+        if answer_match:
+            answer_content = answer_match.group(1).strip()
+            enriched_answer = self.enrich_multi_person_answer(answer_content, question, person_names)
+            answer_raw = re.sub(
+                r"<answer>.*?</answer>",
+                f"<answer>{enriched_answer}</answer>",
+                answer_raw,
+                flags=re.DOTALL,
+            )
+        else:
+            enriched = self.enrich_multi_person_answer("", question, person_names)
+            answer_raw += f"\n<answer>{enriched}</answer>"
+
+        # Rebuild format
+        final_think_match = re.search(r"<think>(.*?)</think>", answer_raw, re.DOTALL)
+        final_answer_match = re.search(r"<answer>(.*?)</answer>", answer_raw, re.DOTALL)
+
+        if final_think_match and final_answer_match:
+            think_final = final_think_match.group(1).strip()
+            answer_final = final_answer_match.group(1).strip()
+            answer_raw = f"<think>\n{think_final}\n</think>\n<answer>{answer_final}</answer>"
+
+        return answer_raw, stats
+
+    def replace_multi_tool_call_placeholders(
+        self, text: str, person_nums: List[int], person_names: List[str], annotations: List[Dict]
+    ) -> Tuple[str, int]:
+        """
+        Replace MULTIPLE {{Identify person #X}} placeholders with proper tool calls
+        """
+        num_replacements = 0
+
+        for person_num, person_name in zip(person_nums, person_names):
+            if person_num <= len(annotations):
+                bbox = annotations[person_num - 1]["bbox"]
+                bbox_str = f"{bbox[0]:.1f},{bbox[1]:.1f},{bbox[2]:.1f},{bbox[3]:.1f}"
+                replacement = f"<tool_call>Identify [{bbox_str}]</tool_call><tool_response>{person_name}</tool_response>"
+
+                pattern = r"\{\{Identify person #" + str(person_num) + r"\}\}"
+                text, count = re.subn(pattern, replacement, text)
+                num_replacements += count
+
+                if count == 0:
+                    pattern_any = r"\{\{Identify person #\d+\}\}"
+                    text, count = re.subn(pattern_any, replacement, text, count=1)
+                    num_replacements += count
+
+        return text, num_replacements
+
     def convert_to_conversation(self, data_entry: Dict) -> List[Dict]:
         """
         Convert one image's data to multiple conversation entries
-        (one per Q&A pair)
+        (one per Q&A pair) - supports both single-person and multi-person Q&A
         """
         conversations = []
         image_path = data_entry["image_path"]
         image_id = data_entry["image_id"]
         annotations = data_entry["annotations"]
         qna_list = data_entry.get("QnA", [])
+        qna_multi_list = data_entry.get("QnA_multi", [])
 
+        # Process single-person Q&A
         for qna in qna_list:
             question = qna.get("Q", "")
             answer_raw = qna.get("A_raw", "")
@@ -338,7 +453,6 @@ After each tool use, the person's identity will be provided as: <tool_response>N
             # Fix question
             question_result = self.fix_question(question)
             if question_result[0] is None:
-                # Question is unfixable, skip
                 self.metrics["malformed_questions"] += 1
                 self.metrics["removed_qna"] += 1
                 continue
@@ -347,7 +461,6 @@ After each tool use, the person's identity will be provided as: <tool_response>N
             if was_malformed:
                 self.metrics["malformed_questions"] += 1
 
-            # Skip if question is too generic or broken
             if len(question.split()) < 5:
                 self.metrics["removed_qna"] += 1
                 continue
@@ -360,7 +473,7 @@ After each tool use, the person's identity will be provided as: <tool_response>N
             if fix_stats["missing_answer"]:
                 self.metrics["missing_answer_tags"] += 1
 
-            # Replace tool call placeholder with actual tool call
+            # Replace tool call placeholder
             if person_num <= len(annotations):
                 bbox = annotations[person_num - 1]["bbox"]
                 answer_fixed, num_replaced = self.replace_tool_call_placeholder(
@@ -368,7 +481,55 @@ After each tool use, the person's identity will be provided as: <tool_response>N
                 )
                 self.metrics["fixed_tool_calls"] += num_replaced
 
-            # Create conversation entry
+            conversation = {
+                "image": image_path,
+                "image_id": image_id,
+                "conversations": [
+                    {"from": "system", "value": self.SYSTEM_PROMPT},
+                    {"from": "human", "value": f"<image>\n{question}"},
+                    {"from": "gpt", "value": answer_fixed},
+                ],
+            }
+
+            conversations.append(conversation)
+            self.metrics["total_qna"] += 1
+
+        # Process multi-person Q&A
+        for qna in qna_multi_list:
+            question = qna.get("Q", "")
+            answer_raw = qna.get("A_raw", "")
+            person_nums = qna.get("person_nums", [])
+            person_names = qna.get("person_names", [])
+
+            # Fix question
+            question_result = self.fix_question(question)
+            if question_result[0] is None:
+                self.metrics["malformed_questions"] += 1
+                self.metrics["removed_qna"] += 1
+                continue
+
+            question, was_malformed = question_result
+            if was_malformed:
+                self.metrics["malformed_questions"] += 1
+
+            if len(question.split()) < 5:
+                self.metrics["removed_qna"] += 1
+                continue
+
+            # Fix and enrich multi-person answer
+            answer_fixed, fix_stats = self.fix_multi_person_answer(answer_raw, question, person_names)
+
+            if fix_stats["missing_think"]:
+                self.metrics["missing_think_tags"] += 1
+            if fix_stats["missing_answer"]:
+                self.metrics["missing_answer_tags"] += 1
+
+            # Replace MULTIPLE tool call placeholders
+            answer_fixed, num_replaced = self.replace_multi_tool_call_placeholders(
+                answer_fixed, person_nums, person_names, annotations
+            )
+            self.metrics["fixed_tool_calls"] += num_replaced
+
             conversation = {
                 "image": image_path,
                 "image_id": image_id,

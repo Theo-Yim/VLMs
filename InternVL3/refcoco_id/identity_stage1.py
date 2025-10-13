@@ -63,12 +63,20 @@ def main():
         default=None,
         help="Custom output folder (default: auto-detect from coco_path)",
     )
+    parser.add_argument(
+        "--multi_person",
+        action="store_true",
+        help="Generate multi-person Q&A (requires 2+ people per image)",
+    )
 
     args = parser.parse_args()
 
     # Initialize processor
     print("=" * 80)
-    print("STAGE 1: Improved Raw Identity Dataset Generation")
+    if args.multi_person:
+        print("STAGE 1: Multi-Person Identity Dataset Generation")
+    else:
+        print("STAGE 1: Improved Raw Identity Dataset Generation")
     print("=" * 80)
     processor = IdentityStage1Processor(
         model_path=args.model, output_path=args.coco_path, output_folder=args.output_folder
@@ -76,6 +84,11 @@ def main():
 
     # Load datasets
     data_list = processor.load_datasets(args.merged_data)
+
+    # Filter for multi-person images if needed
+    if args.multi_person:
+        data_list = [entry for entry in data_list if len(entry["annotations"]) >= 2]
+        print(f"Filtered to {len(data_list)} images with 2+ people")
 
     # Apply range
     if args.end == -1:
@@ -110,17 +123,33 @@ def main():
             print(f"People: {num_people}")
 
             # Step 1: Generate mock names (1 per person, unique)
-            print(f"  [1/2] Generating {num_people} unique mock names...")
+            print(f"  [1/3] Generating {num_people} unique mock names...")
             names = processor.assign_names_to_people(data_entry)
             print(f"    Names: {', '.join(names)}")
             total_llm_calls += num_people
 
-            # Step 2: Generate questions and answers (1 per person)
-            print("  [2/2] Generating diverse questions and answers with RICH reasoning...")
-            num_calls = processor.generate_questions_and_answers(data_entry)
-            num_qna = len(data_entry["QnA"])
-            print(f"    Generated {num_qna} Q&A pairs ({num_calls} LLM calls)")
-            total_llm_calls += num_calls
+            # Step 2: Generate single-person questions and answers (1 per person)
+            if not args.multi_person:
+                print("  [2/3] Generating diverse questions and answers with RICH reasoning...")
+                num_calls = processor.generate_questions_and_answers(data_entry)
+                num_qna = len(data_entry["QnA"])
+                print(f"    Generated {num_qna} single-person Q&A pairs ({num_calls} LLM calls)")
+                total_llm_calls += num_calls
+            else:
+                # Skip single-person Q&A if multi-person mode
+                data_entry["QnA"] = []
+                print("  [2/3] Skipping single-person Q&A (multi-person mode)")
+
+            # Step 3: Generate multi-person questions and answers (optional)
+            if args.multi_person:
+                print("  [3/3] Generating multi-person Q&A pairs...")
+                num_calls = processor.generate_multi_person_questions_and_answers(data_entry)
+                num_qna_multi = len(data_entry.get("QnA_multi", []))
+                print(f"    Generated {num_qna_multi} multi-person Q&A pairs ({num_calls} LLM calls)")
+                total_llm_calls += num_calls
+                num_qna = num_qna_multi
+            else:
+                num_qna = len(data_entry.get("QnA", []))
 
             # Save results immediately
             processor.save_results(data_entry, output_file)
