@@ -20,6 +20,7 @@ from peft import LoraConfig, TaskType
 from transformers import (
     EarlyStoppingCallback,
     HfArgumentParser,
+    TrainerCallback,
     set_seed,
 )
 
@@ -93,6 +94,14 @@ class CustomSFTConfig(SFTConfig):
     # Override defaults for LoRA training
     learning_rate: float = field(default=1e-4)  # Higher LR for LoRA
 
+    # Early stopping
+    early_stopping_patience: int = field(
+        default=0,
+        metadata={
+            "help": "Number of evaluations with no improvement before stopping (0 = disabled)"
+        },
+    )
+
     # SFT-specific parameters
     packing: bool = field(default=False)
     max_seq_length: Optional[int] = field(default=8192)
@@ -142,6 +151,64 @@ def create_dataset_info(training_args: CustomSFTConfig) -> Dict[str, Dict]:
     }
 
 
+class EvalLossCallback(TrainerCallback):
+    """Callback to log evaluation loss to a file"""
+
+    def __init__(self, output_dir):
+        self.output_dir = output_dir
+        self.log_file = os.path.join(output_dir, "eval_loss.txt")
+        # Create output directory if needed, but don't clear the file to preserve history
+        os.makedirs(output_dir, exist_ok=True)
+
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        """Called after evaluation"""
+        if metrics and (not args.local_rank or args.local_rank <= 0):
+            with open(self.log_file, "a") as f:
+                f.write(f"iteration {state.global_step}:\n")
+                f.write(f"{metrics}\n\n")
+            print(f"\n{'=' * 60}")
+            print(f"Evaluation at step {state.global_step}:")
+            if "eval_loss" in metrics:
+                print(f"  eval_loss: {metrics['eval_loss']:.6f}")
+            if "eval_runtime" in metrics:
+                print(f"  eval_runtime: {metrics['eval_runtime']:.2f}s")
+            if "eval_samples_per_second" in metrics:
+                print(f"  eval_samples_per_second: {metrics['eval_samples_per_second']:.3f}")
+            print(f"{'=' * 60}\n")
+
+    def on_train_end(self, args, state, control, **kwargs):
+        """Called at the end of training to log final train metrics"""
+        if state.log_history and (not args.local_rank or args.local_rank <= 0):
+            # Get the final training metrics
+            final_metrics = {}
+            for entry in reversed(state.log_history):
+                if "train_runtime" in entry:
+                    final_metrics = {
+                        k: v
+                        for k, v in entry.items()
+                        if k
+                        in [
+                            "train_runtime",
+                            "train_samples_per_second",
+                            "train_steps_per_second",
+                            "train_loss",
+                            "epoch",
+                        ]
+                    }
+                    break
+
+            if final_metrics:
+                with open(self.log_file, "a") as f:
+                    f.write(f"{final_metrics}\n")
+                print(f"\n{'=' * 60}")
+                print("Training completed!")
+                if "train_loss" in final_metrics:
+                    print(f"  train_loss: {final_metrics['train_loss']:.6f}")
+                if "train_runtime" in final_metrics:
+                    print(f"  train_runtime: {final_metrics['train_runtime']:.2f}s")
+                print(f"{'=' * 60}\n")
+
+
 def print_trainable_parameters(model):
     """Print the number of trainable parameters in the model"""
     trainable_params = 0
@@ -178,8 +245,12 @@ def main():
     # Set seed
     set_seed(training_args.seed)
 
+    # Determine if this is the main process (to avoid duplicate logs)
+    is_main_process = training_args.local_rank in [-1, 0]
+
     # Load model
-    print(f"Loading model from {model_args.model_path}...")
+    if is_main_process:
+        print(f"Loading model from {model_args.model_path}...")
 
     # Handle device mapping for distributed training
     # Note: DeepSpeed ZeRO-3 handles device placement automatically, don't use device_map
@@ -194,12 +265,15 @@ def main():
                     ds_config = json.load(f)
                     zero_stage = ds_config.get("zero_optimization", {}).get("stage", 0)
                     is_deepspeed_zero3 = zero_stage == 3
-                    print(f"DeepSpeed config detected: ZeRO stage {zero_stage}")
+                    if is_main_process:
+                        print(f"DeepSpeed config detected: ZeRO stage {zero_stage}")
             except Exception as e:
-                print(f"Warning: Could not parse DeepSpeed config: {e}")
+                if is_main_process:
+                    print(f"Warning: Could not parse DeepSpeed config: {e}")
 
     if is_deepspeed_zero3:
-        print("DeepSpeed ZeRO-3 detected - loading model without device_map")
+        if is_main_process:
+            print("DeepSpeed ZeRO-3 detected - loading model without device_map")
         model = Ovis2_5.from_pretrained(
             model_args.model_path,
             torch_dtype=torch.bfloat16,
@@ -209,7 +283,8 @@ def main():
         device_map = (
             f"cuda:{training_args.local_rank}" if training_args.local_rank != -1 else "cuda:0"
         )
-        print(f"Using device map: {device_map}")
+        if is_main_process:
+            print(f"Using device map: {device_map}")
         model = Ovis2_5.from_pretrained(
             model_args.model_path,
             torch_dtype=torch.bfloat16,
@@ -218,12 +293,14 @@ def main():
         )
 
     # Create LoRA configuration
-    print("Setting up LoRA configuration...")
+    if is_main_process:
+        print("Setting up LoRA configuration...")
     peft_config = create_lora_config(lora_args)
-    print(
-        f"LoRA config: r={peft_config.r}, alpha={peft_config.lora_alpha}, dropout={peft_config.lora_dropout}"
-    )
-    print(f"Target modules: {peft_config.target_modules}")
+    if is_main_process:
+        print(
+            f"LoRA config: r={peft_config.r}, alpha={peft_config.lora_alpha}, dropout={peft_config.lora_dropout}"
+        )
+        print(f"Target modules: {peft_config.target_modules}")
 
     # Prepare tokenizer
     tokenizer = model.text_tokenizer
@@ -234,7 +311,8 @@ def main():
     dataset_info = create_dataset_info(training_args)
 
     # Create dataset using original ConversationDataset
-    print(f"Loading training dataset from {training_args.data_path}...")
+    if is_main_process:
+        print(f"Loading training dataset from {training_args.data_path}...")
     train_dataset = ConversationDataset(
         name=training_args.data_name,
         info=dataset_info[training_args.data_name],
@@ -242,29 +320,46 @@ def main():
         training_args=training_args,
     )
 
-    print(f"Training dataset loaded: {len(train_dataset)} samples")
+    if is_main_process:
+        print(f"Training dataset loaded: {len(train_dataset)} samples")
 
     # Calculate max_steps to avoid dataloader length issues
     dataset_size = len(train_dataset)
-    effective_batch_size = (
+
+    # Calculate effective batch size accounting for DDP (multiple GPUs)
+    # In DDP, each GPU processes per_device_train_batch_size samples
+    # With gradient_accumulation_steps, that's per_device * grad_accum per GPU
+    # With world_size GPUs, total = per_device * grad_accum * world_size
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+
+    effective_batch_size_per_gpu = (
         training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
     )
-    steps_per_epoch = dataset_size // effective_batch_size
-    if dataset_size % effective_batch_size != 0:
+    effective_batch_size_total = effective_batch_size_per_gpu * world_size
+
+    steps_per_epoch = dataset_size // effective_batch_size_total
+    if dataset_size % effective_batch_size_total != 0:
         steps_per_epoch += 1  # Round up for partial batches
 
-    print(f"Dataset analysis:")
-    print(f"  - Dataset size: {dataset_size}")
-    print(f"  - Effective batch size: {effective_batch_size}")
-    print(f"  - Steps per epoch: {steps_per_epoch}")
+    if is_main_process:
+        print(f"Dataset analysis:")
+        print(f"  - Dataset size: {dataset_size}")
+        print(f"  - Per-device batch size: {training_args.per_device_train_batch_size}")
+        print(f"  - Gradient accumulation steps: {training_args.gradient_accumulation_steps}")
+        print(f"  - Number of GPUs (world_size): {world_size}")
+        print(f"  - Effective batch size per GPU: {effective_batch_size_per_gpu}")
+        print(f"  - Effective batch size (total): {effective_batch_size_total}")
+        print(f"  - Steps per epoch: {steps_per_epoch}")
 
     # If max_steps is not set or is -1, calculate it
     if training_args.max_steps <= 0:
         calculated_max_steps = steps_per_epoch * training_args.num_train_epochs
         training_args.max_steps = calculated_max_steps
-        print(f"  - Auto-calculated max_steps: {calculated_max_steps}")
+        if is_main_process:
+            print(f"  - Auto-calculated max_steps: {calculated_max_steps}")
     else:
-        print(f"  - Using configured max_steps: {training_args.max_steps}")
+        if is_main_process:
+            print(f"  - Using configured max_steps: {training_args.max_steps}")
 
     # Update eval and save steps if they're still fractional
     if training_args.eval_steps and training_args.eval_steps < 1:
@@ -279,7 +374,8 @@ def main():
     # Load validation dataset if provided
     eval_dataset = None
     if training_args.eval_data_path and os.path.exists(training_args.eval_data_path):
-        print(f"Loading validation dataset from {training_args.eval_data_path}...")
+        if is_main_process:
+            print(f"Loading validation dataset from {training_args.eval_data_path}...")
         eval_dataset_info = {
             f"{training_args.data_name}_eval": {
                 "meta_file": training_args.eval_data_path,
@@ -294,22 +390,31 @@ def main():
             model=model,
             training_args=training_args,
         )
-        print(f"Validation dataset loaded: {len(eval_dataset)} samples")
+        if is_main_process:
+            print(f"Validation dataset loaded: {len(eval_dataset)} samples")
     elif training_args.eval_data_path:
-        print(
-            f"Warning: Validation dataset path {training_args.eval_data_path} not found. Skipping validation."
-        )
+        if is_main_process:
+            print(
+                f"Warning: Validation dataset path {training_args.eval_data_path} not found. Skipping validation."
+            )
 
     # Use original data collator
     data_collator = DataCollatorForMultimodalDataset(model.text_tokenizer)
 
     # Initialize SFTTrainer with LoRA
-    print("Initializing SFTTrainer with LoRA...")
+    if is_main_process:
+        print("Initializing SFTTrainer with LoRA...")
 
-    # Add early stopping callback if eval dataset is provided
-    callbacks = []
-    if eval_dataset:
-        callbacks.append(EarlyStoppingCallback(early_stopping_patience=3))
+    # Add callbacks
+    callbacks = [EvalLossCallback(training_args.output_dir)]
+
+    # Add early stopping callback if specified in config
+    if eval_dataset and training_args.early_stopping_patience > 0:
+        callbacks.append(
+            EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping_patience)
+        )
+        if is_main_process:
+            print(f"Early stopping enabled with patience={training_args.early_stopping_patience}")
 
     trainer = SFTTrainer(
         model=model,
@@ -322,24 +427,34 @@ def main():
     )
 
     # Print trainable parameters after PEFT setup
-    print_trainable_parameters(trainer.model)
+    if is_main_process:
+        print_trainable_parameters(trainer.model)
 
     # Training
-    print("Starting LoRA training...")
-    print(f"Training with early stopping: {'enabled' if eval_dataset else 'disabled'}")
-    trainer.train()
+    if is_main_process:
+        print("Starting LoRA training...")
+        print(f"Training with early stopping: {'enabled' if eval_dataset else 'disabled'}")
+    trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
+
+    # Run final evaluation if eval dataset exists
+    if eval_dataset and is_main_process:
+        print("\nRunning final evaluation...")
+        final_metrics = trainer.evaluate()
+        print(f"Final evaluation metrics: {final_metrics}")
 
     # Save model and adapters
-    print("Saving LoRA adapters...")
+    if is_main_process:
+        print("Saving LoRA adapters...")
     trainer.save_model()
     trainer.save_state()
 
     # Optionally save the merged model (requires more memory)
-    if training_args.output_dir:
+    if is_main_process and training_args.output_dir:
         print("Note: To merge LoRA adapters with base model, run the merge script separately.")
         print(f"LoRA adapters saved to: {training_args.output_dir}")
 
-    print("LoRA training completed!")
+    if is_main_process:
+        print("LoRA training completed!")
 
 
 if __name__ == "__main__":

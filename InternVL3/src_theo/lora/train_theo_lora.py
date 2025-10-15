@@ -21,6 +21,7 @@ from transformers import (
     EarlyStoppingCallback,
     HfArgumentParser,
     Trainer,
+    TrainerCallback,
     TrainingArguments,
     set_seed,
 )
@@ -75,6 +76,81 @@ class DataArguments:
     max_dynamic_patches: int = field(default=12)
 
 
+@dataclass
+class CustomTrainingArguments(TrainingArguments):
+    """Extended TrainingArguments with early stopping support."""
+
+    early_stopping_patience: int = field(
+        default=0,
+        metadata={
+            "help": "Number of evaluations with no improvement before stopping (0 = disabled)"
+        },
+    )
+
+
+# =============================================================================
+# Custom Callback
+# =============================================================================
+
+
+class EvalLossCallback(TrainerCallback):
+    """Callback to log evaluation loss to a text file"""
+
+    def __init__(self, output_dir: str):
+        self.output_dir = output_dir
+        self.log_file = os.path.join(output_dir, "eval_loss.txt")
+        # Create output directory if needed, but don't clear the file to preserve history
+        os.makedirs(output_dir, exist_ok=True)
+
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        """Called after evaluation"""
+        if metrics and (not args.local_rank or args.local_rank <= 0):
+            with open(self.log_file, "a") as f:
+                f.write(f"iteration {state.global_step}:\n")
+                f.write(f"{metrics}\n\n")
+            print(f"\n{'=' * 60}")
+            print(f"Evaluation at step {state.global_step}:")
+            if "eval_loss" in metrics:
+                print(f"  eval_loss: {metrics['eval_loss']:.6f}")
+            if "eval_runtime" in metrics:
+                print(f"  eval_runtime: {metrics['eval_runtime']:.2f}s")
+            if "eval_samples_per_second" in metrics:
+                print(f"  eval_samples_per_second: {metrics['eval_samples_per_second']:.3f}")
+            print(f"{'=' * 60}\n")
+
+    def on_train_end(self, args, state, control, **kwargs):
+        """Called at the end of training to log final training metrics"""
+        if state.log_history and (not args.local_rank or args.local_rank <= 0):
+            # Find the last training metrics
+            final_metrics = {}
+            for log_entry in reversed(state.log_history):
+                if "train_runtime" in log_entry:
+                    final_metrics = {
+                        k: v
+                        for k, v in log_entry.items()
+                        if k
+                        in [
+                            "train_runtime",
+                            "train_samples_per_second",
+                            "train_steps_per_second",
+                            "train_loss",
+                            "epoch",
+                        ]
+                    }
+                    break
+
+            if final_metrics:
+                with open(self.log_file, "a") as f:
+                    f.write(f"{final_metrics}\n")
+                print(f"\n{'=' * 60}")
+                print("Training completed!")
+                if "train_loss" in final_metrics:
+                    print(f"  train_loss: {final_metrics['train_loss']:.6f}")
+                if "train_runtime" in final_metrics:
+                    print(f"  train_runtime: {final_metrics['train_runtime']:.2f}s")
+                print(f"{'=' * 60}\n")
+
+
 # =============================================================================
 # Custom Trainer
 # =============================================================================
@@ -110,13 +186,15 @@ class InternVLTrainer(Trainer):
 # =============================================================================
 
 
-def load_model_and_tokenizer(model_args: ModelArguments, training_args):
+def load_model_and_tokenizer(model_args: ModelArguments, training_args, is_main_process):
     """Load InternVL 3.5 model and tokenizer."""
-    print(f"Loading model from {model_args.model_name_or_path}")
+    if is_main_process:
+        print(f"Loading model from {model_args.model_name_or_path}")
 
     # Handle device mapping for distributed training
     device_map = f"cuda:{training_args.local_rank}" if training_args.local_rank != -1 else "cuda:0"
-    print(f"Using device map: {device_map}")
+    if is_main_process:
+        print(f"Using device map: {device_map}")
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
@@ -140,7 +218,8 @@ def load_model_and_tokenizer(model_args: ModelArguments, training_args):
     # Set img_context_token_id (InternVL needs this for image placeholder)
     IMG_CONTEXT_TOKEN = "<IMG_CONTEXT>"
     model.img_context_token_id = tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
-    print(f"✓ Set img_context_token_id = {model.img_context_token_id} for '{IMG_CONTEXT_TOKEN}'")
+    if is_main_process:
+        print(f"✓ Set img_context_token_id = {model.img_context_token_id} for '{IMG_CONTEXT_TOKEN}'")
 
     # Patch the forward method to accept **kwargs (fixes inputs_embeds issue)
     original_forward = model.forward
@@ -152,7 +231,8 @@ def load_model_and_tokenizer(model_args: ModelArguments, training_args):
     import types
 
     model.forward = types.MethodType(forward_with_kwargs, model)
-    print("✓ Patched model.forward() to accept **kwargs")
+    if is_main_process:
+        print("✓ Patched model.forward() to accept **kwargs")
 
     return model, tokenizer
 
@@ -191,7 +271,9 @@ def print_trainable_parameters(model):
 def train():
     """Main training function."""
     # Parse arguments
-    parser = HfArgumentParser((ModelArguments, DataArguments, LoRAArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataArguments, LoRAArguments, CustomTrainingArguments)
+    )
 
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # Load from JSON config file
@@ -204,8 +286,11 @@ def train():
     # Set random seed
     set_seed(training_args.seed if hasattr(training_args, "seed") else 42)
 
+    # Determine if this is the main process (to avoid duplicate logs)
+    is_main_process = training_args.local_rank in [-1, 0]
+
     # Load model and tokenizer
-    model, tokenizer = load_model_and_tokenizer(model_args, training_args)
+    model, tokenizer = load_model_and_tokenizer(model_args, training_args, is_main_process)
 
     # Apply LoRA manually
     if lora_args.lora_enable:
@@ -220,10 +305,9 @@ def train():
             bias="none",
         )
         model = get_peft_model(model, lora_config)
-        print(
-            f"LoRA applied: r={lora_config.r}, alpha={lora_config.lora_alpha}, dropout={lora_config.lora_dropout}"
-        )
-        print_trainable_parameters(model)
+        if is_main_process:
+            print(f"LoRA applied: r={lora_config.r}, alpha={lora_config.lora_alpha}, dropout={lora_config.lora_dropout}")
+            print_trainable_parameters(model)
 
     # Create datasets
     train_dataset = create_dataset(data_args, tokenizer)
@@ -231,7 +315,8 @@ def train():
     # Create eval dataset if eval_data_path is provided
     eval_dataset = None
     if data_args.eval_data_path is not None:
-        print(f"Loading evaluation dataset from: {data_args.eval_data_path}")
+        if is_main_process:
+            print(f"Loading evaluation dataset from: {data_args.eval_data_path}")
         eval_data_args = DataArguments(
             data_path=data_args.eval_data_path,
             eval_data_path=None,
@@ -240,30 +325,46 @@ def train():
             max_dynamic_patches=data_args.max_dynamic_patches,
         )
         eval_dataset = create_dataset(eval_data_args, tokenizer)
-        print(f"Evaluation dataset size: {len(eval_dataset)}")
+        if is_main_process:
+            print(f"Evaluation dataset size: {len(eval_dataset)}")
 
     # Calculate max_steps to avoid dataloader length issues (from Ovis implementation)
     dataset_size = len(train_dataset)
-    effective_batch_size = (
+
+    # Calculate effective batch size accounting for DDP (multiple GPUs)
+    # In DDP, each GPU processes per_device_train_batch_size samples
+    # With gradient_accumulation_steps, that's per_device * grad_accum per GPU
+    # With world_size GPUs, total = per_device * grad_accum * world_size
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+
+    effective_batch_size_per_gpu = (
         training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
     )
+    effective_batch_size_total = effective_batch_size_per_gpu * world_size
 
-    steps_per_epoch = dataset_size // effective_batch_size
-    if dataset_size % effective_batch_size != 0:
+    steps_per_epoch = dataset_size // effective_batch_size_total
+    if dataset_size % effective_batch_size_total != 0:
         steps_per_epoch += 1  # Round up for partial batches
 
-    print("Dataset analysis:")
-    print(f"  - Dataset size: {dataset_size}")
-    print(f"  - Effective batch size: {effective_batch_size}")
-    print(f"  - Steps per epoch: {steps_per_epoch}")
+    if is_main_process:
+        print("Dataset analysis:")
+        print(f"  - Dataset size: {dataset_size}")
+        print(f"  - Per-device batch size: {training_args.per_device_train_batch_size}")
+        print(f"  - Gradient accumulation steps: {training_args.gradient_accumulation_steps}")
+        print(f"  - Number of GPUs (world_size): {world_size}")
+        print(f"  - Effective batch size per GPU: {effective_batch_size_per_gpu}")
+        print(f"  - Effective batch size (total): {effective_batch_size_total}")
+        print(f"  - Steps per epoch: {steps_per_epoch}")
 
     # If max_steps is not set or is -1, calculate it
     if training_args.max_steps <= 0:
         calculated_max_steps = steps_per_epoch * training_args.num_train_epochs
         training_args.max_steps = calculated_max_steps
-        print(f"  - Auto-calculated max_steps: {calculated_max_steps}")
+        if is_main_process:
+            print(f"  - Auto-calculated max_steps: {calculated_max_steps}")
     else:
-        print(f"  - Using configured max_steps: {training_args.max_steps}")
+        if is_main_process:
+            print(f"  - Using configured max_steps: {training_args.max_steps}")
 
     # Update eval and save steps if they're still fractional
     if (
@@ -302,11 +403,13 @@ def train():
 
         if using_deepspeed:
             # DeepSpeed handles gradient checkpointing well
-            print("✓ Using DeepSpeed with gradient checkpointing (recommended)")
+            if is_main_process:
+                print("✓ Using DeepSpeed with gradient checkpointing (recommended)")
         else:
             # Native DDP + gradient checkpointing + LoRA is problematic
-            print("⚠️  WARNING: Gradient checkpointing with native DDP may cause errors.")
-            print("   Consider using DeepSpeed ZeRO-2 or ZeRO-3 instead.")
+            if is_main_process:
+                print("⚠️  WARNING: Gradient checkpointing with native DDP may cause errors.")
+                print("   Consider using DeepSpeed ZeRO-2 or ZeRO-3 instead.")
             # Try to enable anyway for non-DeepSpeed case
             if hasattr(model, "gradient_checkpointing_enable"):
                 model.gradient_checkpointing_enable()
@@ -322,27 +425,40 @@ def train():
         data_collator=data_collator,
     )
 
+    # Add eval loss logging callback
+    trainer.add_callback(EvalLossCallback(training_args.output_dir))
+
     # Add callback for early stopping if specified
-    if (
-        hasattr(training_args, "early_stopping_patience")
-        and training_args.early_stopping_patience > 0
-    ):
+    if eval_dataset and training_args.early_stopping_patience > 0:
         trainer.add_callback(
             EarlyStoppingCallback(early_stopping_patience=training_args.early_stopping_patience)
         )
+        if is_main_process:
+            print(f"Early stopping enabled with patience={training_args.early_stopping_patience}")
 
     # Start training
-    print("Starting training...")
+    if is_main_process:
+        print("Starting training...")
     trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
 
+    # Run final evaluation if eval dataset exists
+    if eval_dataset and (training_args.local_rank <= 0):
+        if is_main_process:
+            print("\nRunning final evaluation...")
+        final_metrics = trainer.evaluate()
+        if is_main_process:
+            print(f"Final evaluation metrics: {final_metrics}")
+
     # Save final model
-    print("Saving final model...")
+    if is_main_process:
+        print("Saving final model...")
     trainer.save_model()
 
     # Save tokenizer
     tokenizer.save_pretrained(training_args.output_dir)
 
-    print(f"Training completed! Model saved to {training_args.output_dir}")
+    if is_main_process:
+        print(f"Training completed! Model saved to {training_args.output_dir}")
 
 
 # =============================================================================
