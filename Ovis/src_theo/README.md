@@ -1,180 +1,180 @@
 # Ovis2.5 Training & Inference Framework
 
-Enhanced training and inference framework for Ovis2.5 multimodal models with DeepSpeed support, evaluation datasets, early stopping, and reflective reasoning capabilities.
+Enhanced training pipeline for Ovis2.5 multimodal models with tool-calling support, DeepSpeed optimization, and GRPO refinement.
 
-## Overview
+## Directory Structure
 
-Comprehensive training pipeline with enhanced features not available in the base framework:
+```
+src_theo/
+├── sft/                      # Supervised Fine-Tuning
+│   ├── train_theo.py        # Standard Trainer (recommended)
+│   ├── train_theo_trl.py    # TRL SFTTrainer variant
+│   ├── train_config.json    # Training configuration
+│   └── train_launch.sh      # Multi-GPU launcher with DeepSpeed
+│
+├── lora/                     # LoRA Fine-Tuning
+│   ├── train_theo_lora.py   # LoRA training script
+│   ├── train_config_lora.json
+│   ├── train_launch_lora.sh
+│   └── merge_lora_adapters.py
+│
+├── grpo/                     # GRPO Refinement (after SFT)
+│   ├── train_theo_grpo.py   # GRPO training script
+│   ├── ovis_grpo_trainer.py # Custom multimodal GRPO trainer
+│   ├── ovis_grpo_generator.py
+│   ├── grpo_config_tool.json
+│   ├── train_launch_grpo.sh
+│   └── GRPO_TRAINING_README.md
+│
+├── tools/                    # Tool System (Crop, Identify)
+│   ├── tool_base.py         # ToolBase + ToolRegistry
+│   ├── crop_tool.py         # Crop tool implementation
+│   ├── mock_id_tool.py      # Identify tool (mock)
+│   ├── inference_integration.py
+│   └── README_TOOL_SYSTEM.md
+│
+├── inference_ovis25.py       # Inference wrapper
+└── sample_data/              # Example data
+```
 
-1. **train_theo.py**: Standard Trainer with evaluation dataset support and early stopping
-2. **train_theo_trl.py**: TRL SFTTrainer version with advanced training features  
-3. **lora/**: LoRA fine-tuning implementation with PEFT integration
-4. **utils/**: Cropping tool functionality (work in progress)
-5. **train_launch.sh**: DeepSpeed launcher with multi-GPU support
+## Quick Start
 
-## Usage
-
-### Step 1: Standard Training
-Full model fine-tuning with evaluation support:
-
+### 1. Standard SFT Training
 ```bash
-# Basic single GPU training
-./train_launch.sh ./train_config.json 1
+# Single GPU
+cd /workspace/VLMs
+bash Ovis/src_theo/sft/train_launch.sh Ovis/src_theo/sft/train_config.json 1
 
-# Multi-GPU training with DeepSpeed
-./train_launch.sh ./train_config.json 4
+# Multi-GPU with DeepSpeed ZeRO-2
+bash Ovis/src_theo/sft/train_launch.sh Ovis/src_theo/sft/train_config.json 4
 ```
 
-### Step 2: TRL Training
-SFTTrainer-based training with advanced features:
-
+### 2. LoRA Training (Memory Efficient)
 ```bash
-./train_launch.sh ./train_config.json 2 trl
+cd /workspace/VLMs
+bash Ovis/src_theo/lora/train_launch_lora.sh
 ```
 
-### Step 3: LoRA Training
-Parameter-efficient fine-tuning:
-
+### 3. GRPO Refinement (Optional)
 ```bash
-cd lora/
-./train_launch_lora.sh ./train_config_lora.json 1
+# After SFT completes
+cd /workspace/VLMs
+bash Ovis/src_theo/grpo/train_launch_grpo.sh
 ```
 
-### Step 4: Inference
-```python
-from inference_ovis25 import Ovis25Inference
+## Training Methods
 
-ovis = Ovis25Inference("AIDC-AI/Ovis2.5-9B")
-response = ovis.single_image_inference(
-    "image.jpg", 
-    "Describe this image",
-    enable_thinking=True
-)
-```
+| Method | Use When | Memory | Speed |
+|--------|----------|--------|-------|
+| **SFT** | Initial training on supervised data | High | Fast |
+| **LoRA** | Limited GPU memory | Low | Fastest |
+| **GRPO** | Refining tool usage after SFT | High | Slow |
+
+## Key Features
+
+- **Tool-calling support**: Crop and Identify tools with automatic execution
+- **Tool response masking**: Prevents hallucination during training
+- **DeepSpeed integration**: ZeRO-0/1/2/3 optimization stages
+- **Early stopping**: Automatic training termination on eval dataset
+- **Thinking mode**: Reflective reasoning with `<think>` tags
+- **Multi-GPU**: DDP and DeepSpeed distributed training
 
 ## Data Format
 
-### Training Dataset
+### Standard Conversation
 ```json
 {
-  "id": "sample_001",
-  "image": "image.jpg",
+  "image": "train2017/000000123.jpg",
   "conversations": [
     {"from": "human", "value": "<image>\nWhat's in this image?"},
-    {"from": "gpt", "value": "This image shows..."}
+    {"from": "gpt", "value": "The image shows..."}
   ]
 }
 ```
 
-### Thinking Mode Training
+### Tool-Calling Format
 ```json
 {
-  "from": "gpt", 
-  "value": "<think>\nLet me analyze this step by step...\n</think>\n\nThe answer is..."
+  "image": "train2017/000000456.jpg",
+  "conversations": [
+    {"from": "system", "value": "You have access to Crop and Identify tools..."},
+    {"from": "human", "value": "<image>\nWho is the person on the left?"},
+    {"from": "gpt", "value": "<think>\nLet me crop the person first.\n<tool_call>Crop [10,20,100,200]</tool_call><image>\nNow identify them.\n<tool_call>Identify [10,20,100,200]</tool_call><tool_response>John Doe</tool_response>\n</think>\n<answer>The person on the left is John Doe.</answer>"}
+  ]
 }
 ```
 
 ## Configuration
 
-### Key Training Parameters
+### SFT Config (`sft/train_config.json`)
 ```json
 {
   "model_path": "AIDC-AI/Ovis2.5-9B",
-  "data_path": "./sample_data/train_data.json", 
-  "eval_data_path": "./sample_data/eval_data.json",
+  "data_path": "./data/train_data.json",
   "output_dir": "./checkpoints/ovis25_finetune",
-  "deepspeed": "./scripts/zero_configs/zero2_cp.json",
-  
-  "num_train_epochs": 3,
+  "deepspeed": "./Ovis/scripts/zero_configs/zero2_cp.json",
+
+  "num_train_epochs": 2,
   "per_device_train_batch_size": 1,
-  "gradient_accumulation_steps": 16,
-  "learning_rate": 2e-5,
-  
-  "train_modules": "all",
-  "multimodal_max_length": 8192,
-  "single_image_max_pixels": 3211264
+  "gradient_accumulation_steps": 32,
+  "learning_rate": 5e-5
 }
 ```
 
-### Enhanced Features
-- **Automatic step calculation** based on dataset size
-- **Early stopping** with evaluation dataset support  
-- **DeepSpeed integration** with official zero configs
-- **Evaluation dataset loading** with proper error handling
-- **Multi-GPU support** with torchrun
-
-## File Structure
-
-```
-scripts/
-├── run_ovis2_5_sft.sh
-└── zero_configs/
-    ├── zero0_cp.json         # ZeRO-0 (No Optimization)
-    ├── zero1_cp.json         # ZeRO-1 (optimizer state sharding)
-    ├── zero2_cp.json         # ZeRO-2 (optimizer + gradient sharding) 
-    └── zero3_cp.json         # ZeRO-3 (full parameter sharding)
-
-src_theo/
-├── README.md                  # This file
-├── train_theo.py              # Standard Trainer with evaluation support
-├── train_theo_trl.py          # TRL SFTTrainer version  
-├── inference_ovis25.py        # Inference with thinking mode support
-├── train_config.json          # Main training configuration
-├── train_launch.sh            # DeepSpeed launcher script
-├── sample_data/               # Sample data
-│   └── data_example.json      # Sample data (not real data)
-│   └── train_data.json        # Sample data using sample_small.png
-├── lora/                      # LoRA fine-tuning implementation
-│   ├── train_theo_lora.py     # LoRA training script
-│   ├── train_config_lora.json # LoRA configuration
-│   └── train_launch_lora.sh   # LoRA launcher
-│   └── merge_lora_adapters.py # LoRA merging utility
-└── tools/                     # Tool-related functionality (WIP)
-    └── crop_tool.py           # Image cropping utilities
+### LoRA Config (`lora/train_config_lora.json`)
+```json
+{
+  "lora_r": 32,
+  "lora_alpha": 64,
+  "lora_target_modules": "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
+  "learning_rate": 1e-4
+}
 ```
 
-## Additional Information about ZeRO Configs
-
-### DeepSpeed ZeRO Optimization Stages
-
-| Stage | Memory Optimization | Communication | Best for |
-|-------|-------------------|---------------|----------|
-| **ZeRO-0** | No sharding | Minimal | Small models, abundant memory |
-| **ZeRO-1** | Optimizer states sharded | Low | Medium models, optimizer bottleneck |
-| **ZeRO-2** | Optimizer + gradients sharded | Balanced | **Recommended for Ovis2.5-9B** |
-| **ZeRO-3** | Full parameter sharding | High | Very large models, limited memory |
-
-### Memory Reduction vs Baseline
-
-- **ZeRO-0**: 1x (baseline) - Full replication
-- **ZeRO-1**: ~4x reduction - Optimizer sharding only
-- **ZeRO-2**: ~8x reduction - Optimizer + gradient sharding  
-- **ZeRO-3**: Nx reduction - Complete parameter sharding
-
-### Configuration Selection
-
-```bash
-# For Ovis2.5-2B (recommended)
-"deepspeed": "./scripts/zero_configs/zero1_cp.json"
-
-# For Ovis2.5-9B (current default)
-"deepspeed": "./scripts/zero_configs/zero2_cp.json"
-
-# For memory-constrained setups
-"deepspeed": "./scripts/zero_configs/zero3_cp.json"
-
-# For small-scale experiments
-"deepspeed": "./scripts/zero_configs/zero0_cp.json"
+### GRPO Config (`grpo/grpo_config_tool.json`)
+```json
+{
+  "sft_model_path": "./Ovis/checkpoints/ovis25_finetune_final",
+  "num_generations": 4,
+  "tool_usage_weight": 0.4,
+  "bbox_validity_weight": 0.3,
+  "reasoning_quality_weight": 0.3
+}
 ```
 
-### Performance Trade-offs
+## DeepSpeed ZeRO Stages
 
-- **ZeRO-0/1**: Fastest training, highest memory usage
-- **ZeRO-2**: Balanced performance and memory efficiency ✅
-- **ZeRO-3**: Maximum memory efficiency, slower communication
+| Stage | Memory Reduction | Best For |
+|-------|-----------------|----------|
+| ZeRO-0 | None | Small models, debugging |
+| ZeRO-1 | ~4x | Medium models |
+| ZeRO-2 | ~8x | **Ovis2.5-9B (recommended)** |
+| ZeRO-3 | Nx | Very large models, limited VRAM |
+
+## Tool System
+
+See `tools/README_TOOL_SYSTEM.md` for details on:
+- Creating custom tools
+- Tool execution during inference
+- Tool response masking during training
+- Image-returning vs text-returning tools
+
+## Inference
+
+```python
+from inference_ovis25 import Ovis25Inference
+
+ovis = Ovis25Inference("AIDC-AI/Ovis2.5-9B")
+response = ovis.single_image_inference(
+    "image.jpg",
+    "Describe this image",
+    enable_thinking=True
+)
+```
 
 ## Notes
 
-- Models: Ovis2.5-2B/9B with thinking mode support
-- Memory: 24GB+ GPU recommended for Ovis2.5-9B
-- Features: DeepSpeed, evaluation datasets, early stopping, LoRA support
+- Ovis2.5 requires `batch_size=1` due to variable tensor sizes (NaViT)
+- Use BF16 (`bf16: true`) for better stability
+- Flash attention recommended: `pip install flash-attn --no-build-isolation`
+- Tool responses are masked from loss computation during training

@@ -7,8 +7,17 @@
   "data_path": "/workspace/data/coco/refcoco_vlm_results_theo_ready_to_train/train_refcoco_qa_pairs_croptool.json",
   "eval_data_path": "/workspace/data/coco/refcoco_vlm_results_theo_ready_to_train/validation_refcoco_qa_pairs_croptool.json",
   "image_folder": "/workspace/data/",
-  
   "output_dir": "./Ovis/checkpoints/ovis25_ft_refcoco_croptool_v1",
+
+  "single_image_min_pixels": 200704,
+  "single_image_max_pixels": 3211264,
+  "multiple_image_min_pixels": 200704,
+  "multiple_image_max_pixels": 802816,
+  "video_min_pixels": 200704,
+  "video_max_pixels": 802816,
+  "min_frames": 10,
+  "max_frames": 10,
+
   "overwrite_output_dir": true,
   "do_train": true,
   "do_eval": true,
@@ -16,11 +25,11 @@
   "num_train_epochs": 2,
   "per_device_train_batch_size": 4,
   "gradient_accumulation_steps": 16,
+  "eval_strategy": "steps",
+  "eval_steps": 0.2,
   "save_strategy": "steps",
   "save_steps": 0.2,
   "save_total_limit": 4,
-  "eval_strategy": "steps",
-  "eval_steps": 0.2,
   "load_best_model_at_end": true,
 
   "learning_rate": 5e-5,
@@ -39,7 +48,9 @@
   "dataloader_num_workers": 16,
   "dataloader_drop_last": true,
   "dataloader_persistent_workers": true,
+  "remove_unused_columns": false,
   "gradient_checkpointing": true,
+  "deepspeed": null,
   
   "train_modules": "all",
   "freeze_vision_tower": false,
@@ -52,19 +63,9 @@
   "multimodal_max_length": 8192,
   "text_max_length": 6000,
   "attn_implementation": "flash_attention_2",
-
-  "single_image_min_pixels": 200704,
-  "single_image_max_pixels": 3211264,
-  "multiple_image_min_pixels": 200704,
-  "multiple_image_max_pixels": 802816,
-  "video_min_pixels": 200704,
-  "video_max_pixels": 802816,
-  "min_frames": 10,
-  "max_frames": 10,
   
   "seed": 42,
   "data_seed": 42,
-  "remove_unused_columns": false,
   "report_to": "none",
   
   "packing": false

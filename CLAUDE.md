@@ -1,53 +1,43 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with this VLM research repository.
 
 ## Repository Overview
 
-This is a Vision-Language Models (VLMs) research repository containing implementations, training scripts, and inference code for multiple multimodal large language models:
+Vision-Language Models (VLMs) research repository with implementations and training pipelines:
 
-- **Ovis** - Open VISion model with structural embedding alignment
-- **InternVL3** - International Vision-Language model series
-- **Custom Trainers** - (Not used) Specialized training implementations for Ovis2.5 and QwenVL2.5
-- **Utils** - Supporting utilities and tools
+- **Ovis2.5** - Open VISion model with tool-calling capabilities (Crop, Identify)
+- **InternVL3.5** - International Vision-Language model with RefCOCO grounding
+- **Utils** - Dataset generation utilities (RefCOCO, Identity tool-calling datasets)
 
-## Architecture
+## Key Architecture Notes
 
-### Main Components
-
-- `Ovis/` - Complete Ovis model implementation with HuggingFace integration, training scripts, and inference
-- `InternVL3/` - InternVL3.5 models with LoRA fine-tuning support and RefCOCO evaluation
-- `custom_trainer/` - Enhanced training implementations with two-stage training (SFT + R-GRPO)
-- `utils/` - Shared utilities including LH_POC-related files and video frame extraction and experimental code
-
-### Model-Specific Architectures
-
-**Ovis2.5:**
+### Ovis2.5
 - Uses `AutoModelForCausalLM` (not `AutoModelForVision2Seq`)
-- Native resolution processing via NaViT
-- Requires batch_size=1 due to variable tensor sizes
-- Custom preprocessing with `model.preprocess_inputs()`
-- Advanced thinking mode with budget control
+- Custom preprocessing: `model.preprocess_inputs(messages)`
+- Thinking mode with `<think>` tags for chain-of-thought reasoning
+- Tool system with auto-detection from `*_tool.py` files
 
-**InternVL3.5:**
+### InternVL3.5
 - Standard HuggingFace Vision2Seq architecture
 - Dynamic resolution support
 - LoRA fine-tuning compatible
-- RefCOCO grounding evaluation support
 
-## Key Training Commands
+---
 
-### Ovis Training
+## Training Commands
+
+### Ovis2.5 Training
 
 ```bash
-# Official training script
-bash Ovis/scripts/run_ovis2_5_sft.sh
+# SFT (Supervised Fine-Tuning) - Start here
+bash Ovis/src_theo/sft/train_launch.sh Ovis/src_theo/sft/train_config.json 4
 
-# Custom trainer
-bash Ovis/src_theo/tran_launch.sh
-
-# LoRA training (recommended for memory efficiency)
+# LoRA (Memory-efficient)
 bash Ovis/src_theo/lora/train_launch_lora.sh
+
+# GRPO (Refinement after SFT - optional)
+bash Ovis/src_theo/grpo/train_launch_grpo.sh
 ```
 
 ### InternVL3 Training
@@ -55,31 +45,30 @@ bash Ovis/src_theo/lora/train_launch_lora.sh
 ```bash
 # LoRA fine-tuning
 cd InternVL3/src_theo/lora
-python train_theo_lora.py train_config.json
-
-# Multi-GPU training
 bash train_launch_lora.sh
 ```
 
+---
+
 ## Inference Commands
 
-### Ovis Inference
+### Ovis2.5
 
 ```bash
-# Basic inference
-python ovis/serve/infer_basic_demo.py
-
-# Thinking mode (reflective reasoning)
-python ovis/serve/infer_think_demo.py
-
 # Web UI
-python ovis/serve/web_ui.py --model-path AIDC-AI/Ovis2.5-9B --port 8001
+python Ovis/ovis/serve/web_ui.py --model-path AIDC-AI/Ovis2.5-9B --port 8001
 
 # vLLM server
 vllm serve AIDC-AI/Ovis2.5-9B --trust-remote-code --port 8000
+
+# Basic inference
+python Ovis/ovis/serve/infer_basic_demo.py
+
+# Thinking mode
+python Ovis/ovis/serve/infer_think_demo.py
 ```
 
-### InternVL3 Inference
+### InternVL3
 
 ```bash
 # Batch inference
@@ -87,35 +76,41 @@ python InternVL3/inference_img_batch.py
 
 # Video inference
 python InternVL3/inference_vd.py
-
-# Simple inference
-python InternVL3/inference_simple.py
 ```
+
+---
 
 ## Data Formats
 
-### Ovis Training Data (JSONL)
+### Ovis Training Data
+
+**Standard conversation:**
 ```json
 {
+  "image": "train2017/000000123.jpg",
   "conversations": [
-    {
-      "id": "sample_001",
-      "image": "cat_on_table.jpg",
-      "conversations": [
-        {
-          "from": "human",
-          "value": "<image>\nWhat do you see in this image?"
-        },
-        {
-          "from": "gpt",
-          "value": "I see a beautiful orange tabby cat sitting on a wooden table. The cat appears to be relaxed and is looking directly at the camera. The background shows a cozy indoor setting with soft lighting."
-        }
-      ]
-    },
+    {"from": "human", "value": "<image>\nWhat's in this image?"},
+    {"from": "gpt", "value": "This image shows..."}
+  ]
 }
 ```
 
-### InternVL3 Training Data (JSON)
+**Tool-calling format:**
+```json
+{
+  "image": "train2017/000000456.jpg",
+  "conversations": [
+    {"from": "system", "value": "You have access to Crop and Identify tools..."},
+    {"from": "human", "value": "<image>\nWho is this person?"},
+    {"from": "gpt", "value": "<think>\nLet me identify them.\n<tool_call>Identify [10,20,100,200]</tool_call><tool_response>John Doe</tool_response>\n</think>\n<answer>This is John Doe.</answer>"}
+  ]
+}
+```
+
+**Important:** `<tool_response>` is **masked from loss** during training to prevent hallucination.
+
+### InternVL3 Training Data
+
 ```json
 [
   {
@@ -129,26 +124,135 @@ python InternVL3/inference_simple.py
 ]
 ```
 
-## Testing and Validation
+---
 
-```bash
-# Test Ovis integration
-cd custom_trainer/Ovis2.5
-python test_ovis_integration.py
+## Tool System (Ovis Only)
 
-# Test InternVL inference
-cd InternVL3/src_theo/lora
-python test_inference.py
+### Creating Tools
 
-# RefCOCO evaluation
-cd InternVL3/refcoco
-python evaluate_refcoco.py
+Tools are auto-detected from `Ovis/src_theo/tools/*_tool.py`:
+
+```python
+# Ovis/src_theo/tools/your_tool.py
+from .tool_base import ToolBase
+
+class YourTool(ToolBase):
+    """Tool description for LLM guidance."""
+
+    def extract_tool_call(self, text):
+        # Parse single call (inference)
+        pass
+
+    def execute(self, image, parameters):
+        # Execute tool - return {"type": "image"|"text", "content": ...}
+        pass
 ```
 
-## Development Notes
+**No configuration needed** - tools are auto-registered!
 
-- All models support thinking mode with `<think>` tags for reasoning
-- Grounding support via `<ref>`, `<box>`, `<point>` tags (Ovis) or tool calls (custom trainer)
-- Flash attention recommended for performance: `pip install flash-attn --no-build-isolation`
-- Use BF16 (`--bf16`) for better stability than FP16
-- Monitor training with TensorBoard logs in respective output directories
+### Tool Usage
+
+- **Image-returning tools** (Crop): `<tool_call>Crop [x,y,x2,y2]</tool_call><image>`
+- **Text-returning tools** (Identify): `<tool_call>Identify [x,y,x2,y2]</tool_call><tool_response>Name</tool_response>`
+
+See `Ovis/src_theo/tools/README_TOOL_SYSTEM.md` for details.
+
+---
+
+## Dataset Generation
+
+### RefCOCO Crop Tool-Calling Dataset
+
+Located in `InternVL3/refcoco/`:
+
+```bash
+# Pipeline: merge → generate Q&A → LLM refine → convert → filter
+python merge_refcoco_datasets.py
+python refcoco_main3.py
+python refcoco_main_llm.py
+python create_jsonl.py
+python convert_QnA_data_to_standard.py
+```
+
+**Output:** High-quality crop tool-calling dataset (90.6/100 quality score)
+
+### Identity Tool-Calling Dataset
+
+Located in `InternVL3/refcoco_id/`:
+
+```bash
+# Two-stage generation: raw Q&A → refinement
+python identity_stage1.py --merged_data merged_refcoco_data.pkl
+python identity_stage2.py --stage1_folder refcoco_identity_stage1
+```
+
+**Output:** 45k Q&A pairs (31k single-person + 14k multi-person)
+
+See respective README.md files for detailed pipelines.
+
+---
+
+## File Structure
+
+```
+VLMs/
+├── Ovis/
+│   ├── src_theo/
+│   │   ├── sft/              # Standard SFT training
+│   │   ├── lora/             # LoRA training
+│   │   ├── grpo/             # GRPO refinement
+│   │   ├── tools/            # Tool system (Crop, Identify)
+│   │   └── inference_ovis25.py
+│   └── ovis/serve/           # Official inference scripts
+│
+├── InternVL3/
+│   ├── src_theo/lora/        # LoRA training
+│   ├── refcoco/              # Crop tool dataset generation
+│   └── refcoco_id/           # Identity tool dataset generation
+│
+└── utils/
+    ├── split_dataset.py      # Dataset splitting utility
+    └── lh-poc/model/         # LH-POC model files
+```
+
+---
+
+## Common Tasks
+
+### Training Ovis2.5 on Tool-Calling Data
+
+1. **Prepare data:** Merge RefCOCO + Identity datasets
+2. **Train SFT:** `bash Ovis/src_theo/sft/train_launch.sh ...`
+3. **Optional GRPO:** `bash Ovis/src_theo/grpo/train_launch_grpo.sh`
+
+### Adding New Tools
+
+1. Create `Ovis/src_theo/tools/new_tool.py` inheriting from `ToolBase`
+2. Implement `extract_tool_call()` and `execute()`
+3. Tool auto-registers - no config needed!
+
+### Testing Tool System
+
+```bash
+python Ovis/src_theo/tools/test_tool_system.py
+```
+
+---
+
+## Important Notes
+
+- **Ovis2.5 batch_size=1** is mandatory (NaViT architecture)
+- **Tool responses must be masked** during training (see `conversation_dataset.py`)
+- **Use BF16** (`bf16: true`) for better stability than FP16
+- **Flash attention** recommended: `pip install flash-attn --no-build-isolation`
+- **DeepSpeed ZeRO-2** recommended for Ovis2.5-9B training
+
+---
+
+## References
+
+- **Ovis paper:** NaViT-based multimodal architecture
+- **Tool system:** `Ovis/src_theo/tools/README_TOOL_SYSTEM.md`
+- **GRPO training:** `Ovis/src_theo/grpo/GRPO_TRAINING_README.md`
+- **RefCOCO dataset:** `InternVL3/refcoco/README.md`
+- **Identity dataset:** `InternVL3/refcoco_id/README.md`

@@ -142,6 +142,35 @@ python identity_stage2.py \
 4. **Why post-processing (Stage 2)?** LLMs are unreliable at formatting; deterministic fixes ensure quality
 5. **Why save per-image JSONs in Stage 1?** Resume capability, easier to debug individual images
 
+## Training Implementation
+
+### Tool Response Masking (CRITICAL)
+
+**Location**: `Ovis/ovis/train/dataset/conversation_dataset.py`
+
+During training, `<tool_response>...</tool_response>` is **masked** (excluded from loss computation) to ensure proper training-inference alignment:
+
+**What gets trained:**
+- ✅ `<tool_call>Identify [x,y,x2,y2]</tool_call>` → Model learns to generate tool calls
+- ❌ `<tool_response>Name</tool_response>` → **MASKED** (system provides this, not model)
+- ✅ Text after `</tool_response>` → Model learns to use returned information
+
+**Why masking is essential:**
+- **Without masking**: Model learns to predict/hallucinate names instead of waiting for system
+- **With masking**: Model learns tool call → wait for system response → use response
+- **Result**: Perfect training-inference alignment
+
+**Verification**: Run `python Ovis/src_theo/tools/test_masking.py` to verify masking works correctly.
+
+**Training-Inference Alignment:**
+
+| Phase | Behavior | Tool Response Source |
+|-------|----------|---------------------|
+| **Training** | Model generates `<tool_call>`, observes `<tool_response>` (masked), continues reasoning | Training data (masked from loss) |
+| **Inference** | Model generates `<tool_call>`, pauses, system inserts `<tool_response>`, model resumes | External identification system |
+
+This ensures model learns to **delegate** identification to external system, not predict names.
+
 ## Quality & Status
 
 **✅ Production Ready** - Meets ideal quality standards (see [QUALITY_COMPARISON.md](QUALITY_COMPARISON.md))

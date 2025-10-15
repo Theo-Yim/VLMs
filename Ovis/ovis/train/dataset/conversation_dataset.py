@@ -241,24 +241,86 @@ class ConversationDataset(MultimodalDataset):
 
         return messages, has_think_tag
 
+    def _find_and_mask_sequence(self, labels, input_ids_list, start_marker, end_marker, search_start=0):
+        """
+        Find and mask token sequences between start_marker and end_marker.
+
+        Args:
+            labels: Label list to modify
+            input_ids_list: Input token IDs
+            start_marker: Start marker string (e.g., "<tool_response>")
+            end_marker: End marker string (e.g., "</tool_response>")
+            search_start: Position to start searching from
+
+        Returns:
+            Number of sequences masked
+        """
+        try:
+            start_ids = self.text_tokenizer.encode(start_marker, add_special_tokens=False)
+            end_ids = self.text_tokenizer.encode(end_marker, add_special_tokens=False)
+
+            masked_count = 0
+            search_pos = search_start
+
+            while search_pos < len(input_ids_list):
+                # Find start marker
+                start_found = False
+                for i in range(search_pos, len(input_ids_list) - len(start_ids) + 1):
+                    if input_ids_list[i : i + len(start_ids)] == start_ids:
+                        start_pos = i
+                        start_found = True
+                        break
+
+                if not start_found:
+                    break
+
+                # Find end marker after start
+                end_found = False
+                for i in range(start_pos + len(start_ids), len(input_ids_list) - len(end_ids) + 1):
+                    if input_ids_list[i : i + len(end_ids)] == end_ids:
+                        end_pos = i + len(end_ids)
+                        end_found = True
+                        break
+
+                if end_found:
+                    # Mask the entire sequence including markers
+                    for i in range(start_pos, end_pos):
+                        labels[i] = IGNORE_ID
+                    masked_count += 1
+                    search_pos = end_pos
+                else:
+                    # End marker not found, stop searching
+                    break
+
+            return masked_count
+
+        except Exception as e:
+            logging.warning(f"Failed to mask sequence {start_marker}...{end_marker}: {e}")
+            return 0
+
     def _generate_labels(self, input_ids, messages):
-        """input_ids에서 labels 생성 - assistant 부분만 학습 대상으로 설정"""
+        """
+        Generate labels from input_ids - only assistant parts are training targets.
+
+        IMPORTANT: Masks <tool_response>...</tool_response> to prevent model from
+        learning to generate tool responses (they should come from external system).
+        """
         input_ids_list = input_ids[0].tolist()  # [1, seq_len] → [seq_len]
         labels = [IGNORE_ID] * len(input_ids_list)
 
         try:
-            # <|im_start|>assistant 토큰 찾기
+            # Find <|im_start|>assistant tokens
             im_start_token = "<|im_start|>"
             assistant_token = "assistant"
 
-            # 토큰화해서 시퀀스 찾기
+            # Tokenize and find sequence
             im_start_ids = self.text_tokenizer.encode(im_start_token, add_special_tokens=False)
             assistant_ids = self.text_tokenizer.encode(assistant_token, add_special_tokens=False)
 
-            # <|im_start|>assistant 시퀀스 찾기
+            # Find <|im_start|>assistant sequence
             target_sequence = im_start_ids + assistant_ids
 
-            # input_ids에서 이 시퀀스 찾기
+            # Find this sequence in input_ids
             assistant_start_pos = None
             for i in range(len(input_ids_list) - len(target_sequence) + 1):
                 if input_ids_list[i : i + len(target_sequence)] == target_sequence:
@@ -266,7 +328,7 @@ class ConversationDataset(MultimodalDataset):
                     break
 
             if assistant_start_pos is not None:
-                # 줄바꿈 토큰 건너뛰기 (선택적)
+                # Skip newline tokens (optional)
                 while (
                     assistant_start_pos < len(input_ids_list)
                     and self.text_tokenizer.decode([input_ids_list[assistant_start_pos]]).strip()
@@ -274,25 +336,39 @@ class ConversationDataset(MultimodalDataset):
                 ):
                     assistant_start_pos += 1
 
-                # <|im_start|>assistant 이후부터 학습 대상
-                # 단, <|im_end|> 토큰은 제외
+                # Set training target from <|im_start|>assistant onwards
+                # Exclude <|im_end|> token
                 im_end_ids = self.text_tokenizer.encode("<|im_end|>", add_special_tokens=False)
 
-                # assistant_start_pos부터 끝까지 또는 <|im_end|>까지
+                # From assistant_start_pos to end or until <|im_end|>
                 end_pos = len(input_ids_list)
                 for i in range(assistant_start_pos, len(input_ids_list) - len(im_end_ids) + 1):
                     if input_ids_list[i : i + len(im_end_ids)] == im_end_ids:
                         end_pos = i
                         break
 
-                # Assistant 응답 부분만 학습 대상으로 설정
+                # Set assistant response as training target
                 if end_pos > assistant_start_pos:
                     labels[assistant_start_pos:end_pos] = input_ids_list[
                         assistant_start_pos:end_pos
                     ]
 
+                    # ========== MASK TOOL RESPONSES ==========
+                    # Mask <tool_response>...</tool_response> regions
+                    # These are provided by external system, model should NOT learn to generate them
+                    masked_count = self._find_and_mask_sequence(
+                        labels,
+                        input_ids_list,
+                        "<tool_response>",
+                        "</tool_response>",
+                        search_start=assistant_start_pos
+                    )
+
+                    if masked_count > 0:
+                        logging.debug(f"Masked {masked_count} <tool_response> sequences")
+
         except Exception as e:
-            # 에러 발생 시 전체를 IGNORE_ID로 유지 (안전)
+            # On error, keep entire sequence as IGNORE_ID (safe)
             logging.warning(f"Failed to generate labels: {e}. Using all IGNORE_ID.")
 
         return torch.tensor(labels, dtype=torch.long).unsqueeze(0)  # [seq_len] → [1, seq_len]

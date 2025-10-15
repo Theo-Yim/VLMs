@@ -169,8 +169,8 @@ This tool:
 2. Execute tools to get results
 3. Process based on return type:
    - **Image tools**: Add image to visual tokens, remove `<image>` marker from text
-   - **Text tools**: Keep `<tool_response>` in text unchanged
-4. Model trains with tool results present in context
+   - **Text tools**: Keep `<tool_response>` in text, but **MASK from loss computation**
+4. Model trains with tool results present in context (image tools: visual tokens; text tools: masked text)
 
 ## Architecture
 
@@ -244,9 +244,22 @@ enable_debug_logging()
 
 ### Why `<tool_response>` is needed for text-returning-tool in training dataset:
 
-- `<tool_response>` is **actual text** that appears in model's context
-- Model needs to learn to expect this format after tool calls
-- At inference: system inserts same format
+**Dataset format:**
+```json
+"<tool_call>Identify [x,y,x2,y2]</tool_call><tool_response>Name</tool_response>\nThis is Name."
+```
+
+**Training processing:**
+- `<tool_response>Name</tool_response>` is kept in text but **MASKED from loss** (no backprop)
+- Model observes the format but doesn't learn to generate it
+- Model learns: tool call → system provides response → use response in reasoning
+
+**Why masking is critical:**
+- ❌ **Without masking**: Model learns to predict/hallucinate tool responses
+- ✅ **With masking**: Model learns to wait for system-provided responses
+- **Result**: Perfect training-inference alignment - model delegates to tool, doesn't predict
+
+**Implementation**: See `Ovis/ovis/train/dataset/conversation_dataset.py:_generate_labels()`
 
 
 ## Testing
