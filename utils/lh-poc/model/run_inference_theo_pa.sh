@@ -6,7 +6,7 @@ echo "=== Simple Parallel InternVL Launcher ==="
 # EDIT THESE PATHS FOR YOUR SETUP
 DATA_ROOT="/home/Theo-Yim/data/lh-poc/"
 # IMAGE_ROOT="/mnt/nas1/data/lh-poc/lh-data-image/image/20250722"
-RESULT_DIR="/workspace/VLMs/utils/lh-poc/results_theo_parallel"
+RESULT_DIR="/workspace/data/lh-poc/results_dataset_creation/results_theo_parallel"
 MODEL_PATH="OpenGVLab/InternVL3_5-38B"
 PYTHON_SCRIPT="inference_theo_pa.py"
 DATA_TYPE="train"

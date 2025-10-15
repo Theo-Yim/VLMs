@@ -4,9 +4,8 @@ Uses standard PyTorch DataLoader with num_workers for true parallel loading.
 """
 
 import torch
+from model.InternVL3_preprocess import load_image
 from torch.utils.data import DataLoader, Dataset
-
-from InternVL3.utils.preprocess import load_image
 
 
 class LHDataset(Dataset):

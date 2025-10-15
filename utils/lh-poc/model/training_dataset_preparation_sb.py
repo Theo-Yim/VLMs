@@ -131,13 +131,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--base_path",
         type=str,
-        default="/workspace/VLMs/utils/lh-poc/results_sb_parallel_v2",
+        default="/workspace/data/lh-poc/results_dataset_creation/results_sb_parallel_v2",
         help="Path to inference results",
     )
     parser.add_argument(
         "--output_path",
         type=str,
-        default="/workspace/VLMs/utils/lh-poc/dataset_lh_sb_v2_train.json",
+        default="/workspace/data/lh-poc/dataset_train_ready/dataset_lh_sb_v2_train.json",
         help="Output JSON file path",
     )
     parser.add_argument(

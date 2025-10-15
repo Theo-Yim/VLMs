@@ -211,15 +211,15 @@ def get_optimal_max_num() -> int:
             gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
             print(f"Detected GPU memory: {gpu_memory_gb:.1f} GB")
             # Set max_num based on GPU memory
-            if gpu_memory_gb >= 25:
+            if gpu_memory_gb >= 20:
                 max_num = 12
                 print(f"Using max_num = {max_num} for high-memory GPU ({gpu_memory_gb:.1f}GB)")
-            elif gpu_memory_gb >= 20:
-                max_num = 10
-                print(f"Using max_num = {max_num} for 24GB GPU ({gpu_memory_gb:.1f}GB)")
+            elif gpu_memory_gb >= 15:
+                max_num = 8
+                print(f"Using max_num = {max_num} for 16GB GPU ({gpu_memory_gb:.1f}GB)")
             else:
                 max_num = 6
-                print(f"Using max_num = {max_num} for ~20GB GPU ({gpu_memory_gb:.1f}GB)")
+                print(f"Using max_num = {max_num} for ~16GB GPU ({gpu_memory_gb:.1f}GB)")
             return max_num
         else:
             print("CUDA not available, using default max_num")
@@ -298,7 +298,7 @@ def finish_generation() -> Tuple[gr.update, gr.update]:
     return gr.update(value="Generate", interactive=True), gr.update(interactive=True)
 
 
-def build_demo(model_path: str, gpu: int):
+def build_demo(model_path: str, gpu: int, prompt_sb=False):
     """Build single-model Gradio demo interface."""
     global model, tokenizer
 
@@ -306,12 +306,17 @@ def build_demo(model_path: str, gpu: int):
     optimal_max_num = get_optimal_max_num()
 
     # Define the prompt as a constant
-    prompt_input = "## Your job is to analyze a home image for structural issues and defects. Carefully examine all visual cues in the original image. Use logical reasoning to identify the areas and materials that might be associated with a potential defect, as well as any physical clues.\nYou need to guess the space, defect type, defect description, material part, and location in the image of the image.\n\nYou must output the final answer in the list of json objects, where each json is possible defect information with the following fields:\n- space: [Space name from the list of Spaces]\n- defect_present: Yes / Unknown\n- If Yes, also include:\n  - defect_type: [type from the list of Defect Types]\n  - defect_description: [brief description of the defect]\n  - material_part: [material part from the list of Material Parts]\n  - location_in_image: [describe location within the image, if applicable]\nList up the json objects in the order of possible combinations, and try to generate 2-3 possible json objects.\n\n### List of Defect Types and Descriptions\nPoor Caulking : The sealant (caulking/silicone) applied around window frames, bathtubs, or sinks to block moisture and air is peeling, cracked, or missing.\nWater Leak : Water seeps into the building's interior (walls, ceiling, floor) due to a damaged waterproof layer, broken pipes, etc.\nDelamination / Flaking : A paint or coating layer flakes or peels off like a film. It often implies a more severe condition than 'Lifting' (들뜸).\nCorrosion / Rust : Metal materials deteriorate and rust due to chemical reactions with oxygen and moisture in the air.\nScratch / Nick / Dent : A general term for marks or damage on a surface, including nicks, dents, and scratches.\nDamage / Breakage : A material is broken or shattered due to external impact, losing its original function.\nPoor Finishing : The final touches, such as wallpapering, painting, or caulking, are messy or incomplete.\nLifting / Peeling : Wallpaper, vinyl sheets, tiles, or flooring material is detaching from the surface due to poor adhesion.\nCrack : A line-shaped break that appears on the surface of concrete or finishing materials like walls, floors, or ceilings. It can be caused by structural issues or material shrinkage/expansion.\nStain / Contamination : A surface has a mark, spot, or dirt that cannot be easily removed.\nHole / Puncture : An unintentional hole in a wall, floor, or door.\nGrout Loss : The grout material between tiles is cracking, crumbling, or falling out.\nDiscoloration : The original color of a material has changed due to factors like sunlight, chemicals, or moisture.\nGap / Separation : An unintended space has opened up between two components that should be joined, such as a door frame and a wall.\nPoor paintwork : A defect in the quality or application of paint on a building's surface\nPeeling : A defect where a layer or coating comes off, typically referring to paint or plaster.\nPoor Joint / Seam : The connection point between two materials (e.g., wallpaper sheets, floorboards) is not smooth or has a gap.\nSinking / Indentation : A part of a surface, such as a floor or wall, is dented or has sunk inward.\nCondensation : Water droplets form on surfaces like walls and windows due to temperature differences, as moisture from the air condenses. It is a primary cause of mold.\nPoor wallpapering : A defect or issue related to improper or poor quality wallpaper installation\nTear : A type of defect characterized by a long, narrow opening or breakage in a material or structure"
+    prompt_input_th = "## Your job is to analyze a home image for structural issues and defects. Carefully examine all visual cues in the original image. Use logical reasoning to identify the areas and materials that might be associated with a potential defect, as well as any physical clues.\nYou need to guess the space, defect type, defect description, material part, and location in the image of the image.\n\nYou must output the final answer in the list of json objects, where each json is possible defect information with the following fields:\n- space: [Space name from the list of Spaces]\n- defect_present: Yes / Unknown\n- If Yes, also include:\n  - defect_type: [type from the list of Defect Types]\n  - defect_description: [brief description of the defect]\n  - material_part: [material part from the list of Material Parts]\n  - location_in_image: [describe location within the image, if applicable]\nList up the json objects in the order of possible combinations, and try to generate 2-3 possible json objects.\n\n### List of Defect Types and Descriptions\nPoor Caulking : The sealant (caulking/silicone) applied around window frames, bathtubs, or sinks to block moisture and air is peeling, cracked, or missing.\nWater Leak : Water seeps into the building's interior (walls, ceiling, floor) due to a damaged waterproof layer, broken pipes, etc.\nDelamination / Flaking : A paint or coating layer flakes or peels off like a film. It often implies a more severe condition than 'Lifting' (들뜸).\nCorrosion / Rust : Metal materials deteriorate and rust due to chemical reactions with oxygen and moisture in the air.\nScratch / Nick / Dent : A general term for marks or damage on a surface, including nicks, dents, and scratches.\nDamage / Breakage : A material is broken or shattered due to external impact, losing its original function.\nPoor Finishing : The final touches, such as wallpapering, painting, or caulking, are messy or incomplete.\nLifting / Peeling : Wallpaper, vinyl sheets, tiles, or flooring material is detaching from the surface due to poor adhesion.\nCrack : A line-shaped break that appears on the surface of concrete or finishing materials like walls, floors, or ceilings. It can be caused by structural issues or material shrinkage/expansion.\nStain / Contamination : A surface has a mark, spot, or dirt that cannot be easily removed.\nHole / Puncture : An unintentional hole in a wall, floor, or door.\nGrout Loss : The grout material between tiles is cracking, crumbling, or falling out.\nDiscoloration : The original color of a material has changed due to factors like sunlight, chemicals, or moisture.\nGap / Separation : An unintended space has opened up between two components that should be joined, such as a door frame and a wall.\nPoor paintwork : A defect in the quality or application of paint on a building's surface\nPeeling : A defect where a layer or coating comes off, typically referring to paint or plaster.\nPoor Joint / Seam : The connection point between two materials (e.g., wallpaper sheets, floorboards) is not smooth or has a gap.\nSinking / Indentation : A part of a surface, such as a floor or wall, is dented or has sunk inward.\nCondensation : Water droplets form on surfaces like walls and windows due to temperature differences, as moisture from the air condenses. It is a primary cause of mold.\nPoor wallpapering : A defect or issue related to improper or poor quality wallpaper installation\nTear : A type of defect characterized by a long, narrow opening or breakage in a material or structure"
+
+    prompt_input_sb = "## Your job is to analyze a home image for structural issues and defects. Carefully examine all visual cues in the original image. Use logical reasoning to identify the areas and materials that might be associated with a potential defect, as well as any physical clues.\nYou need to guess the space, defect type, defect description, material part, and location in the image of the image.\n\n* End your response with 'Final answer: '. In the Final answer section, there should be the list of json objects, where each json is possible defect information with the following fields:\n- space: [Space name from the list of Spaces]\n- defect_present: Yes / Unknown\n- If Yes, also include:\n  - defect_type: [type from the list of Defect Types]\n  - defect_description: [brief description of the defect]\n  - material_part: [material part from the list of Material Parts]\n  - location_in_image: [describe location within the image, if applicable]\n* List up the json objects in the order of possible combinations, and try to generate 2-3 possible json objects.\n\n### List of Defect Types and Descriptions\nPoor Caulking : The sealant (caulking/silicone) applied around window frames, bathtubs, or sinks to block moisture and air is peeling, cracked, or missing.\nWater Leak : Water seeps into the building's interior (walls, ceiling, floor) due to a damaged waterproof layer, broken pipes, etc.\nDelamination / Flaking : A paint or coating layer flakes or peels off like a film. It often implies a more severe condition than 'Lifting' (들뜸).\nCorrosion / Rust : Metal materials deteriorate and rust due to chemical reactions with oxygen and moisture in the air.\nScratch / Nick / Dent : A general term for marks or damage on a surface, including nicks, dents, and scratches.\nDamage / Breakage : A material is broken or shattered due to external impact, losing its original function.\nPoor Finishing : The final touches, such as wallpapering, painting, or caulking, are messy or incomplete.\nLifting / Peeling : Wallpaper, vinyl sheets, tiles, or flooring material is detaching from the surface due to poor adhesion.\nCrack : A line-shaped break that appears on the surface of concrete or finishing materials like walls, floors, or ceilings. It can be caused by structural issues or material shrinkage/expansion.\nStain / Contamination : A surface has a mark, spot, or dirt that cannot be easily removed.\nHole / Puncture : An unintentional hole in a wall, floor, or door.\nGrout Loss : The grout material between tiles is cracking, crumbling, or falling out.\nDiscoloration : The original color of a material has changed due to factors like sunlight, chemicals, or moisture.\nGap / Separation : An unintended space has opened up between two components that should be joined, such as a door frame and a wall.\nPoor paintwork : A defect in the quality or application of paint on a building's surface\nPeeling : A defect where a layer or coating comes off, typically referring to paint or plaster.\nPoor Joint / Seam : The connection point between two materials (e.g., wallpaper sheets, floorboards) is not smooth or has a gap.\nSinking / Indentation : A part of a surface, such as a floor or wall, is dented or has sunk inward.\nCondensation : Water droplets form on surfaces like walls and windows due to temperature differences, as moisture from the air condenses. It is a primary cause of mold.\nPoor wallpapering : A defect or issue related to improper or poor quality wallpaper installation\nTear : A type of defect characterized by a long, narrow opening or breakage in a material or structure"
+
+    if not prompt_sb:
+        prompt_input = prompt_input_th
+    else:
+        prompt_input = prompt_input_sb
 
     # Create a wrapper function that uses the constant prompt with optimal max_num
-    def run_model_with_prompt(
-        image_input: Optional[PIL.Image.Image], do_sample: bool, enable_thinking: bool
-    ) -> str:
+    def run_model_with_prompt(image_input, do_sample: bool, enable_thinking: bool) -> str:
         return run_single_model_internal(
             image_input, prompt_input, do_sample, enable_thinking, max_num=optimal_max_num
         )
@@ -398,13 +403,14 @@ def parse_args():
     parser.add_argument(
         "--server-name", type=str, default="0.0.0.0", help="Server name for Gradio app."
     )
+    parser.add_argument("--prompt-sb", action="store_true", help="Use the SB style prompt.")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
 
-    demo = build_demo(model_path=args.model_path, gpu=args.gpu)
+    demo = build_demo(model_path=args.model_path, gpu=args.gpu, prompt_sb=args.prompt_sb)
 
     print(f"Launching Gradio app at http://{args.server_name}:{args.port}")
     demo.queue().launch(
