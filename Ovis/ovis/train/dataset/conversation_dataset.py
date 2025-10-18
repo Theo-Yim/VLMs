@@ -212,6 +212,12 @@ class ConversationDataset(MultimodalDataset):
         ), "Multi-turn conversations are not supported yet."
 
         for conv in conversations:
+            # Handle system, user, and assistant roles separately
+            if conv["from"] == "system":
+                # System message - add as system role
+                messages.append({"role": "system", "content": conv["value"]})
+                continue
+
             role = "user" if conv["from"] == "human" else "assistant"
 
             if role == "user":

@@ -1,13 +1,13 @@
 {
     "model_path": "AIDC-AI/Ovis2.5-9B",
     "visual_vocab_size": 65536,
-    
+
     "data_name": "construction_inspection",
     "data_type": "conversation",
     "data_path": "/mnt/nas1/data/coco/refcoco_vlm_results_theo_ready_to_train/refcoco_toolcall_merged_train.json",
     "eval_data_path": "/mnt/nas1/data/coco/refcoco_vlm_results_theo_ready_to_train/refcoco_toolcall_merged_val.json",
     "image_folder": "/home/Theo-Yim/data/",
-    "output_dir": "./Ovis/checkpoints/ovis25_lora_toolcall_v2",
+    "output_dir": "./Ovis/checkpoints/ovis25_lora_toolcall_v3",
 
     "single_image_min_pixels": 200704,
     "single_image_max_pixels": 3211264,
@@ -18,10 +18,11 @@
     "min_frames": 10,
     "max_frames": 10,
 
-    "lora_r": 32,
-    "lora_alpha": 64,
+    "lora_r": 48,
+    "lora_alpha": 96,
     "lora_dropout": 0.05,
     "lora_target_modules": "q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj",
+    "lora_modules_to_save": "llm.model.embed_tokens,llm.lm_head",
     "apply_lora_to_vision": true,
 
     "overwrite_output_dir": true,
@@ -31,19 +32,20 @@
 
     "num_train_epochs": 2,
     "per_device_train_batch_size": 1,
+    "per_device_eval_batch_size": 2,
     "gradient_accumulation_steps": 4,
     "eval_strategy": "steps",
-    "eval_steps": 0.05,
+    "eval_steps": 0.1,
     "save_strategy": "steps",
     "save_steps": 0.1,
     "save_total_limit": 4,
     "load_best_model_at_end": true,
     "metric_for_best_model": "eval_loss",
-    "early_stopping_patience": 3,
+    "early_stopping_patience": 5,
 
-    "learning_rate": 5e-5,
+    "learning_rate": 6e-5,
     "max_grad_norm": 1.0,
-    "weight_decay": 0.0,
+    "weight_decay": 0.005,
     "warmup_steps": 500,
     "lr_scheduler_type": "cosine",
     "logging_steps": 30,
@@ -64,7 +66,7 @@
 
     "ovis_pretrained_path": "AIDC-AI/Ovis2.5-9B",
     "stage": 3,
-    "multimodal_max_length": 8192,
+    "multimodal_max_length": 6144,
     "text_max_length": 6000,
     "attn_implementation": "flash_attention_2",
 

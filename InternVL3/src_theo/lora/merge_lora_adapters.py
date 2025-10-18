@@ -55,7 +55,34 @@ def merge_lora_adapters(
     print("Merging LoRA adapters with base model...")
 
     # Merge the adapters with the base model
-    merged_model = model.merge_and_unload()
+    # progressbar=False to avoid tqdm issues in some environments
+    merged_model = model.merge_and_unload(progressbar=False)
+
+    # IMPORTANT: Check if there are modules_to_save (e.g., embeddings, lm_head)
+    # These are fully trained (not LoRA) and need to be copied over
+    if hasattr(peft_config, 'modules_to_save') and peft_config.modules_to_save:
+        print(f"Copying fully-trained modules: {peft_config.modules_to_save}")
+
+        # The modules_to_save are already in the merged_model after merge_and_unload()
+        # but let's verify they were properly transferred
+        for module_name in peft_config.modules_to_save:
+            if hasattr(model, module_name):
+                print(f"  ✓ {module_name} will be saved")
+            else:
+                # Try to find it in nested attributes
+                parts = module_name.split('.')
+                obj = model
+                found = True
+                for part in parts:
+                    if hasattr(obj, part):
+                        obj = getattr(obj, part)
+                    else:
+                        found = False
+                        break
+                if found:
+                    print(f"  ✓ {module_name} found and will be saved")
+                else:
+                    print(f"  ⚠ Warning: {module_name} not found in model")
 
     print(f"Saving merged model to {output_path}...")
 
@@ -77,6 +104,33 @@ def merge_lora_adapters(
             tokenizer.save_pretrained(output_path)
         except:
             print("Warning: Could not save tokenizer. You may need to copy it manually.")
+
+    # Copy additional config files that are NOT auto-generated
+    # Note: generation_config.json is automatically created by save_pretrained()
+    print("Copying additional config files...")
+    import shutil
+
+    # Only copy files that are needed but not automatically saved
+    config_files = [
+        "preprocessor_config.json",  # Required for image processor
+        "chat_template.json"          # Useful for chat formatting
+    ]
+
+    for config_file in config_files:
+        # Try adapter path first (from training checkpoint)
+        source = os.path.join(adapter_path, config_file)
+        if os.path.exists(source):
+            dest = os.path.join(output_path, config_file)
+            shutil.copy2(source, dest)
+            print(f"  ✓ Copied {config_file} from adapter")
+        else:
+            # Try base model path (from original model)
+            source = os.path.join(base_model_name, config_file)
+            if os.path.exists(source):
+                dest = os.path.join(output_path, config_file)
+                shutil.copy2(source, dest)
+                print(f"  ✓ Copied {config_file} from base model")
+            # If file doesn't exist anywhere, that's OK - it's optional
 
     print("Merge completed successfully!")
     print(f"Merged model saved to: {output_path}")

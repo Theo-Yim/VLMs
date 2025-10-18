@@ -58,6 +58,12 @@ class LoRAArguments:
         metadata={"help": "Comma-separated list of target modules for LoRA"},
     )
 
+    # Modules to save (fully train, not LoRA) - useful for embeddings when learning new tokens
+    lora_modules_to_save: Optional[str] = field(
+        default=None,
+        metadata={"help": "Comma-separated list of modules to fully train (e.g., llm.model.embed_tokens,llm.lm_head)"},
+    )
+
     # Whether to apply LoRA to visual components
     apply_lora_to_vision: bool = field(
         default=False, metadata={"help": "Whether to apply LoRA to vision encoder"}
@@ -125,6 +131,11 @@ def create_lora_config(lora_args: LoRAArguments) -> LoraConfig:
     # Parse target modules
     target_modules = [module.strip() for module in lora_args.lora_target_modules.split(",")]
 
+    # Parse modules to save (fully train)
+    modules_to_save = None
+    if lora_args.lora_modules_to_save:
+        modules_to_save = [module.strip() for module in lora_args.lora_modules_to_save.split(",")]
+
     # Create LoRA config
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
@@ -133,6 +144,7 @@ def create_lora_config(lora_args: LoRAArguments) -> LoraConfig:
         lora_alpha=lora_args.lora_alpha,
         lora_dropout=lora_args.lora_dropout,
         target_modules=target_modules,
+        modules_to_save=modules_to_save,  # Fully train these modules (e.g., embeddings)
         bias="none",  # Don't apply LoRA to bias terms
     )
 
@@ -160,8 +172,26 @@ class EvalLossCallback(TrainerCallback):
         # Create output directory if needed, but don't clear the file to preserve history
         os.makedirs(output_dir, exist_ok=True)
 
+    def on_step_end(self, args, state, control, **kwargs):
+        """Clear CUDA cache periodically to prevent OOM"""
+        if state.global_step % 300 == 0:
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
+
+    def on_predict(self, args, state, control, **kwargs):
+        """Called at the START of evaluation - clear cache before eval begins"""
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         """Called after evaluation"""
+        # Clear cache after evaluation (common leak point)
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+
         if metrics and (not args.local_rank or args.local_rank <= 0):
             with open(self.log_file, "a") as f:
                 f.write(f"iteration {state.global_step}:\n")
